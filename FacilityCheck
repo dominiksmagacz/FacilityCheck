@@ -1,0 +1,3206 @@
+using Metabots.ExcelMetabot;
+#pragma warning disable 1701
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Microsoft.VisualBasic;
+using System.Windows.Forms;
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.parser;
+using System.Drawing.Imaging;
+using System.Drawing;
+using System.Collections;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
+namespace C04___HU.Facility {
+
+	class GbsInterface {
+
+
+		//GetText and SetText
+		public static void SetText(dynamic gbs, int row, int col, string text, bool clearField = true) {
+			gbs.SetCursor(col, row);
+			if (clearField) {
+				gbs.ExecOperation("EEOL");
+			}
+			gbs.SendKeys(text);
+		}
+
+		public void merge(string filePath, int count) {
+			iTextSharp.text.Document document = new iTextSharp.text.Document();
+			using (var stream = new FileStream(filePath + ".pdf", FileMode.Create, FileAccess.Write, FileShare.None)) {
+				PdfWriter.GetInstance(document, stream);
+				document.Open();
+				for (int i = 0; i<count; i++) {
+					using (var imageStream = new FileStream(filePath + (i + 1) + ".jpg", FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+						var image = iTextSharp.text.Image.GetInstance(imageStream);
+						document.Add(image);
+					}
+				}
+				document.Close();
+			}
+		}
+
+		public string GetText(dynamic gbs, int row, int col, int length) {
+			gbs.WaitUnlock();
+			return gbs.GetScreen(col, row, length);
+		}
+
+
+		public void GetPdf(string filePath, string outPath) {
+			//			string filePath = @"C:/Users/HC33CL/Downloads/5.pdf";
+			//			string outPath = @"C:/Users/HC33CL/Downloads/result.txt";
+			int pagesToScan = 20;
+
+
+			string strText = string.Empty;
+			//strText.
+			try {
+				PdfReader reader = new PdfReader(filePath);
+
+				for (int page = 1; page <= pagesToScan; page++) //(int page = 1; page <= reader.NumberOfPages; page++) <- for scanning all the pages in A PDF
+				{
+					ITextExtractionStrategy its = new iTextSharp.text.pdf.parser.LocationTextExtractionStrategy();
+					strText = PdfTextExtractor.GetTextFromPage(reader, page, its);
+
+					strText = Encoding.UTF8.GetString(ASCIIEncoding.Convert(Encoding.Default, Encoding.UTF8, Encoding.Default.GetBytes(strText)));
+					//creating the string array and storing the PDF line by line
+					string[] lines = strText.Split('\n');
+					foreach (string line in lines) {
+						//Creating and appending to a text file
+						using (System.IO.StreamWriter file = new System.IO.StreamWriter(outPath + "result.txt", true)) {
+							file.WriteLine(line);
+						}
+					}
+				}
+
+				reader.Close();
+			}
+			catch (Exception ex) {
+				Console.Write(ex);
+			}
+		}
+
+		public string FacilityValue(string resultPath, int row, int line, int lenght) {
+			ArrayList list = new ArrayList();
+			string value;
+			try {
+				string all = "";
+				string[] text = System.IO.File.ReadAllLines(resultPath + "result.txt");
+				for (int i = 0; i< text.Length; i++) {
+					System.Console.WriteLine($"{i} - {text[i]}");
+					all = all + String.Join(" ", text[i]);
+					list.Add(text[i]);
+				}
+
+				if (lenght == 0) {
+					var buffor = list[row];
+					int size = (Convert.ToString(buffor)).Length;
+					value = Convert.ToString(buffor).Substring(line, (size - line));
+				}
+				else {
+					var buffor = list[row];
+					value = Convert.ToString(buffor).Substring(line, lenght);
+				}
+			} catch {
+				value = "";
+			}
+			return value;
+		}
+
+		public int ValueIndex(string resultPath, int row, string looking) {
+			ArrayList list = new ArrayList();
+			int index;
+			try {
+				string all = "";
+				string[] text = System.IO.File.ReadAllLines(resultPath + "result.txt");
+				for (int i = 0; i< text.Length; i++) {
+					System.Console.WriteLine($"{i} - {text[i]}");
+					all = all + String.Join(" ", text[i]);
+					list.Add(text[i]);
+				}
+				var buffor = list[row];
+				string value = Convert.ToString(buffor).ToLower();
+				index = value.IndexOf(looking);
+			} catch {
+				System.Console.WriteLine("Exception out of Range");
+				index = 0;
+			}
+			return index;
+
+		}
+
+		public int ValueIndexLast(string resultPath, int row, string looking) {
+			ArrayList list = new ArrayList();
+			int index;
+			try {
+				string all = "";
+				string[] text = System.IO.File.ReadAllLines(resultPath + "result.txt");
+				for (int i = 0; i< text.Length; i++) {
+					System.Console.WriteLine($"{i} - {text[i]}");
+					all = all + String.Join(" ", text[i]);
+					list.Add(text[i]);
+				}
+				var buffor = list[row];
+				string value = Convert.ToString(buffor).ToLower();
+				index = value.LastIndexOf(looking);
+			} catch {
+				System.Console.WriteLine("Exception out of Range");
+				index = 0;
+			}
+			return index;
+		}
+
+		public string FacilityUpdateID(string resultPath) {
+			ArrayList list = new ArrayList();
+			string all = "";
+			string[] text = System.IO.File.ReadAllLines(resultPath + "result.txt");
+			for (int i = 0; i< text.Length; i++) {
+				System.Console.WriteLine($"{i} - {text[i]}");
+				all = all + String.Join(" ", text[i]);
+				list.Add(text[i]);
+			}
+			var buffor = list[3];
+			string facilityID = Convert.ToString(buffor).Substring(16, 8); 	// Facility ID
+			return facilityID;
+		}
+		public void ScreenShot(dynamic gbsinterface, string resultPath, string filename) {
+
+			Process[] processesGBS = Process.GetProcessesByName("Win6530");
+			IntPtr windowHandleGBS = processesGBS[0].MainWindowHandle;
+			//zrobienie screena
+			var screenGBS = gbsinterface.PrintWindow(windowHandleGBS);
+
+			screenGBS = resizeImage(screenGBS, new Size(550, 550));
+			screenGBS.Save(resultPath + filename + ".jpg", ImageFormat.Jpeg);
+		}
+
+		public static System.Drawing.Image resizeImage(System.Drawing.Image imgToResize, Size size) {
+			return (System.Drawing.Image)(new Bitmap(imgToResize, size));
+		}
+
+		public void closeFacility(dynamic gbs, string resultPath, string filename) {  //correct method
+
+			Excel excel = new Excel(false);
+			Dictionary<string, string> myDict = new Dictionary<string, string>();
+			int count = 0;
+			int start = 0;
+			string flag = "";
+			myDict.Add(excel.GetValueText(9, 4), excel.GetValueText(9, 7));
+			int loopCount = 0;
+			int accountCount = 0;
+			string[] accountID = new string[25];
+			for (int i = 11; i<20; i++) {
+				if (excel.GetValueText(i, 4) == "Account ID" && excel.GetValueText(i, 7) != "") {
+					accountID[accountCount] = excel.GetValueText(i, 7);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 12);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 14);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 16);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 18);
+					accountCount++;
+					loopCount++;
+				}
+			}
+			//FOVLUPDT/FOVLUPDV
+			for (int i = 10; i<25; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FOVLUPDT/FOVLUPDV") {
+					start = i;
+					i = 25;
+				}
+			}
+			for (int i = start + 2; i< start + 10; i++) {
+				if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "") {
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+				}
+				if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 23) != "" && excel.GetValueText(i, 23) != " (Facility ID of the next facility - to be removed)") {
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 23));
+				}
+
+
+			}
+			//ACCCUPDT/ACCCUPDV
+			for (int i = 40; i<65; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "ACCCUPDT/ACCCUPDV") {
+					start = i;
+					i = 65;
+				}
+			}
+			for (int i = start + 2; i< start + 3; i++) {
+				if (excel.GetValueText(i, 4) != "" && (excel.GetValueText(i, 7) != "" || excel.GetValueText(i, 10) != "")) {
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7) + " " + excel.GetValueText(i, 10));
+				}
+				if (excel.GetValueText(i, 10) != "" && excel.GetValueText(i, 24) != "") {
+					myDict.Add(excel.GetValueText(i, 20), excel.GetValueText(i, 24));
+				}
+			}
+			string gbsBussinesType = "";
+			string gbsNegativeBalance = "";
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+			GbsInterface gbsinterface = new GbsInterface();
+			if (accountCount == 0) {
+				GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+				gbs.ExecOperation("SF10");
+				GbsInterface.SetText(gbs, 1, 20, myDict["Facility ID"]);
+				gbs.ExecOperation("F1");
+				gbs.WaitUnlock();
+				gbs.ExecOperation("F1");
+				string cos = gbsinterface.GetText(gbs, 0, 0, 1920);
+				System.Console.WriteLine(cos);
+
+				if (cos.Contains("REVERSED")) {
+					Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been reversed");
+					ScreenShot(gbsinterface, resultPath, filename + "_reversedCheck");
+				}
+				else {
+					Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been not reversed yet");
+					ScreenShot(gbsinterface, resultPath, filename + "_reversedCheck");
+				}
+			}
+			else {
+				count = 1;
+				GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+				gbs.WaitUnlock();
+				gbs.ExecOperation("SF10");
+				gbs.WaitUnlock();
+				GbsInterface.SetText(gbs, 1, 20, myDict["Facility ID"]);
+				gbs.WaitUnlock();
+				gbs.ExecOperation("F1");
+				gbs.WaitUnlock();
+				string cos = gbsinterface.GetText(gbs, 0, 0, 1920);
+				ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+				count++;
+				gbs.WaitUnlock();
+				GbsInterface.SetText(gbs, 0, 2, "ACCTINQ");
+				gbs.WaitUnlock();
+				accountCount = 0;
+				for (int i = 0; i<loopCount; i++) {
+					GbsInterface.SetText(gbs, 0, 1, "ACCTINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 1, 14, "D");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 1, 21, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 47, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 56, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 64, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 74, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+					gbs.WaitUnlock();
+					count++;
+					gbsBussinesType = gbsinterface.GetText(gbs, 12, 69, 9);
+					gbsNegativeBalance = gbsinterface.GetText(gbs, 9, 29, 1);
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+					gbs.WaitUnlock();
+					count++;
+				}
+
+				GbsInterface.SetText(gbs, 0, 1, "CPINQ");
+				gbs.WaitUnlock();
+				gbs.ExecOperation("SF10");
+				gbs.WaitUnlock();
+				GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+				//int screen = 5;
+				try {
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+					gbs.WaitUnlock();
+					count++;
+
+					int row = 7;
+					bool check = true;
+					while (check) {
+						string value = gbsinterface.GetText(gbs, row, 23, 23).Replace(" ", "");
+						if (value != "") {
+							GbsInterface.SetText(gbs, row, 22, "Y");
+							gbs.WaitUnlock();
+							gbs.ExecOperation("F1");
+							gbs.WaitUnlock();
+							ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+							gbs.WaitUnlock();
+							gbs.ExecOperation("F7");
+							count++;
+							row++;
+							if (row == 20) check = false;
+						}
+						else
+							check = false;
+					}
+				}catch {
+					System.Console.WriteLine("Empty records in CPINQ");
+				}
+
+				merge(resultPath + filename + "_Check", count -1);
+
+				string strFilePath = resultPath + filename + "comparation.csv";
+				string strSeperator = ";";
+				StringBuilder sbOutput = new StringBuilder();
+
+				string[][] inaOutput = new string[][] {
+					new string[] {
+						"Header", "GBSValues", "ExcelValues", "Status of Check"
+					},
+						new string[] {
+						"Bussines Type", gbsBussinesType, DictExtension.GetValueOrDefault(myDict, "Business type"), "=B2=C2"
+					},
+						new string[] {
+						"Negative Balance", gbsNegativeBalance, DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B3=C3"
+					},
+				};
+				int ilength = inaOutput.GetLength(0);
+				for (int i = 0; i < ilength; i++)
+					sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+				// Create and write the csv file
+				File.WriteAllText(strFilePath, sbOutput.ToString());
+
+
+				if (cos.Contains("REVERSED")) {
+					Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been reversed");
+				}
+				else {
+					Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been not reversed yet");
+				}
+
+				System.IO.File.Delete(resultPath + "result.txt");
+				for (int i = 1; i <= count; i++) {
+					System.IO.File.Delete(resultPath + filename + "_Check" + i + ".jpg");
+				}
+			}
+
+
+			//			return myDict;
+		}
+
+
+		//Facility Close      C:\Users\HC33CL\Downloads\FC00032521 Facility close_dticonsult.pdf
+		public void FacilityCloseNoAccount(string id, dynamic gbs, string resultPath, string filename) {
+			GbsInterface gbsinterface = new GbsInterface();
+			GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+			gbs.ExecOperation("SF10");
+			GbsInterface.SetText(gbs, 1, 20, id);
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			string cos = gbsinterface.GetText(gbs, 0, 0, 1920);
+			System.Console.WriteLine(cos);
+
+
+			if (cos.Contains("REVERSED")) {
+				Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been reversed");
+				ScreenShot(gbsinterface, resultPath, filename + "_reversedCheck");
+			}
+			else {
+				Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been not reversed yet");
+				ScreenShot(gbsinterface, resultPath, filename + "_reversedCheck");
+			}
+
+			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= 2; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+		}
+
+		//C:\Users\HC33CL\Downloads\FC00080858 Facility close.pdf
+		public void FacilityCloseAccount(string id, dynamic gbs, string resultPath, string filename, string bussinesType, string negativeBalance, string customerID, string type, string ccy, string reff, string Sbrch) {
+			GbsInterface gbsinterface = new GbsInterface();
+			int count = 0;
+			GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 20, id);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			string cos = gbsinterface.GetText(gbs, 0, 0, 1920);
+			ScreenShot(gbsinterface, resultPath, filename + "_Check1");
+			count++;
+
+			GbsInterface.SetText(gbs, 0, 2, "ACCTINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 14, "D");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 21, customerID);
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 47, type);
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 56, ccy);
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 64, reff);
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 74, Sbrch);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_Check2");
+			gbs.WaitUnlock();
+			count++;
+			string gbsBussinesType = gbsinterface.GetText(gbs, 12, 69, 9);
+			string gbsNegativeBalance = gbsinterface.GetText(gbs, 9, 29, 1);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_Check3");
+			gbs.WaitUnlock();
+			count++;
+			GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 2, 17, customerID);
+			//int screen = 5;
+			try {
+				gbs.WaitUnlock();
+				gbs.ExecOperation("F1");
+				gbs.WaitUnlock();
+				ScreenShot(gbsinterface, resultPath, filename + "_Check4");
+				gbs.WaitUnlock();
+				count++;
+
+				int row = 7;
+				bool check = true;
+				while (check) {
+					string value = gbsinterface.GetText(gbs, row, 23, 23).Replace(" ", "");
+					if (value != "") {
+						GbsInterface.SetText(gbs, row, 22, "Y");
+						gbs.WaitUnlock();
+						gbs.ExecOperation("F1");
+						gbs.WaitUnlock();
+						ScreenShot(gbsinterface, resultPath, filename + "_Check" + count);
+						gbs.WaitUnlock();
+						gbs.ExecOperation("F7");
+						count++;
+						row++;
+						if (row == 20) check = false;
+					}
+					else
+						check = false;
+				}
+			}catch {
+				System.Console.WriteLine("Empty records in CPINQ");
+			}
+			System.Console.WriteLine(count);
+			merge(resultPath + filename + "_Check", count -1);
+
+			string strFilePath = resultPath + filename + "comparation.csv";
+			string strSeperator = ";";
+			StringBuilder sbOutput = new StringBuilder();
+
+			string[][] inaOutput = new string[][] {
+				new string[] {
+					"Header", "GBSValues", "PDFValues", "Status of Check"
+				},
+						new string[] {
+					"Bussines Type", gbsBussinesType, bussinesType, "=B2=C2"
+				},
+						new string[] {
+					"Negative Balance", gbsNegativeBalance, negativeBalance, "=B3=C3"
+				},
+			};
+			int ilength = inaOutput.GetLength(0);
+			for (int i = 0; i < ilength; i++)
+				sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+			// Create and write the csv file
+			File.WriteAllText(strFilePath, sbOutput.ToString());
+
+
+			if (cos.Contains("REVERSED")) {
+				Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been reversed");
+			}
+			else {
+				Microsoft.VisualBasic.Interaction.MsgBox("This Facility has been not reversed yet");
+			}
+
+			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= count; i++) {
+				System.IO.File.Delete(resultPath + filename + "_Check" + i + ".jpg");
+			}
+		}
+
+		public void newFacility(dynamic gbs, string resultPath, string filename) {  //correct method
+			Excel excel = new Excel(false);
+			Dictionary<string, string> myDict = new Dictionary<string, string>();
+			//			string customerID;
+			int count = 0;
+			int start = 0;
+			string flag = "";
+
+			for (int i = 10; i<25; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FOVLCAPT/FOVLCAPV") {
+					start = i;
+					i = 25;
+				}
+			}
+			//Page1
+			int accountCount = 0;
+			bool acctinqCheck = false;
+			int loopCount = 0;
+			string[] accountID = new string[25];
+			string customerID = excel.GetValueText(9, 7);
+
+
+			//			System.Console.WriteLine(acctinqCheck);
+			//			System.Console.WriteLine(customerID);
+			string[] department = new string[2];
+			department[0] = excel.GetValueText(start + 2, 7);
+			department[1] = excel.GetValueText(start + 2, 12);
+			string officer = excel.GetValueText(start + 2, 25);
+			string[] values = new string[1000];
+			string[] headers = new string[1000];
+			for (int i = start + 4; i<start + 27; i++) {
+				if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 4) != "Limits") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					count++;
+				}
+				if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 20) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+				else if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 23) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 23);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 23));
+					count++;
+				}
+				else if (excel.GetValueText(i, 16) != "" && excel.GetValueText(i, 20) != "") {
+					headers[count] = excel.GetValueText(i, 16);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 16), excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+			//Page2
+			int customerIDcount = 1;
+			myDict.Add(excel.GetValueText(9, 4), excel.GetValueText(9, 7));
+			for (int i = start + 29; i<start + 41; i++) {
+				if (excel.GetValueText(i, 7) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					count++;
+					if (excel.GetValueText(start + 29, 4) == "Customer ID") {
+						myDict.Add(excel.GetValueText(start + 29, 4) + customerIDcount, excel.GetValueText(i, 6) + excel.GetValueText(i, 7));
+						customerIDcount++;
+					}
+					else {
+						myDict.Add(excel.GetValueText(start + 30, 4) + customerIDcount, excel.GetValueText(i, 6) + excel.GetValueText(i, 7));
+						customerIDcount++;
+					}
+				}
+				if (excel.GetValueText(i, 18) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+			//Page3
+			int crTypeCount = 1;
+			for (int i = start + 43; i<start + 48; i++) {
+				if (excel.GetValueText(i, 7) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					if (excel.GetValueText(start + 43, 4) == "Cr. type")
+						myDict.Add(excel.GetValueText(start + 43, 4) + crTypeCount, excel.GetValueText(i, 7));
+					else
+						myDict.Add(excel.GetValueText(start + 44, 4) + crTypeCount, excel.GetValueText(i, 7));
+					crTypeCount++;
+					count++;
+				}
+			}
+			int currencyListCount = 1;
+			if (excel.GetValueText(start + 49, 4) != "") {
+				myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, 7));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, 10));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, 12));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, 14));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, 16));
+				currencyListCount++;
+			}
+			else if (excel.GetValueText(start + 50, 4) != "") {
+				myDict.Add(excel.GetValueText(start + 50, 4) + currencyListCount, excel.GetValueText(start + 50, 7));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 50, 4) + currencyListCount, excel.GetValueText(start + 50, 10));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 50, 4) + currencyListCount, excel.GetValueText(start + 50, 12));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 50, 4) + currencyListCount, excel.GetValueText(start + 50, 14));
+				currencyListCount++;
+				myDict.Add(excel.GetValueText(start + 50, 4) + currencyListCount, excel.GetValueText(start + 50, 16));
+				currencyListCount++;
+			}
+			//			for (int i = 7; i<16; i++) {
+			//				if (excel.GetValueText(start + 49, 7) != "" && excel.GetValueText(start + 49, 7) != "I") {
+			//					headers[count] = excel.GetValueText(start + 49, 4);
+			//					values[count] = excel.GetValueText(start + 49, i);
+			//					myDict.Add(excel.GetValueText(start + 49, 4) + currencyListCount, excel.GetValueText(start + 49, i));
+			//					count++;
+			//					currencyListCount++;
+			//				}
+			//			}
+			//page4
+			for (int i = start + 53; i<start + 78; i++) {
+				if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					count++;
+				}
+				else if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "" && excel.GetValueText(i, 9) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 9);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7) + " " + excel.GetValueText(i, 9));
+					count++;
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					count++;
+				}
+				else if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 8) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 9);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 8));
+					count++;
+				}
+				if (excel.GetValueText(i, 18) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+				else if (excel.GetValueText(i, 16) != "" && excel.GetValueText(i, 16) != "(in case of UFN)") {
+					headers[count] = excel.GetValueText(i, 16);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 16), excel.GetValueText(i, 20) + " " + excel.GetValueText(i, 22));
+					count++;
+				}
+				else if (excel.GetValueText(i, 17) != "") {
+					headers[count] = excel.GetValueText(i, 17);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 17) + "4page", excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+			//ACCCUPDT
+			for (int i = 70; i<105; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "ACCCUPDT/ACCCUPDV") {
+					start = i;
+					i = 105;
+				}
+			}
+			for (int i = start + 6; i<start + 20; i++) {
+				if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					count++;
+				}
+				if (excel.GetValueText(i, 20) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+				if (excel.GetValueText(i, 3) == "AMRTCAPT/AMRTCAPV")
+					i = start + 20;
+			}
+			for (int i = 100; i<125; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "AMRTCAPT/AMRTCAPV") {
+					start = i;
+					i = 125;
+				}
+			}
+			for (int i = start + 2; i<start + 5; i++) {
+				//				if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "") {
+				if (excel.GetValueText(i, 4) != "") {
+
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4) + "6page", excel.GetValueText(i, 7));
+					count++;
+				}
+				if (excel.GetValueText(i, 20) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18) + " 6page", excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+
+			for (int i = 100; i<130; i++) {
+				flag = excel.GetValueText(i, 4);
+				if (flag == "ccy") {
+					start = i;
+					i = 130;
+				}
+			}
+			int amrtCount = 1;
+			for (int i = start; i<start + 5; i++) {
+				if (excel.GetValueText(i, 4) != "") {
+					if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 5) != "") {
+						headers[count] = excel.GetValueText(i, 4);
+						values[count] = excel.GetValueText(i, 5);
+						myDict.Add(excel.GetValueText(i, 4) + " 6page" + amrtCount, excel.GetValueText(i, 5));
+						count++;
+					}
+					if (excel.GetValueText(i, 7) != "" && excel.GetValueText(i, 9) != "") {
+						headers[count] = excel.GetValueText(i, 7);
+						values[count] = excel.GetValueText(i, 9);
+						myDict.Add(excel.GetValueText(i, 7) + " 6page" + amrtCount, excel.GetValueText(i, 9));
+						count++;
+					}
+					if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 20) != "") {
+						headers[count] = excel.GetValueText(i, 18);
+						values[count] = excel.GetValueText(i, 20);
+						myDict.Add(excel.GetValueText(i, 18) + " 6page" + amrtCount, excel.GetValueText(i, 20) + excel.GetValueText(i, 22));
+						count++;
+						headers[count] = excel.GetValueText(i, 18);
+						values[count] = excel.GetValueText(i, 22);
+						count++;
+					}
+					amrtCount++;
+				}
+			}
+			string[] jeden = new string[5];
+			string[] dwa= new string[5];
+			string[] trzy= new string[5];
+			string[] cztery= new string[5];
+			
+			try {
+							string jeden1 = DictExtension.GetValueOrDefault(myDict, "Customer ID1");
+			jeden = jeden1.Split(' ');
+			}
+			catch{
+				jeden[0] = "";
+			}
+				try {
+								string dwa2 = DictExtension.GetValueOrDefault(myDict, "Customer ID2");
+			dwa = dwa2.Split(' ');
+			}
+			catch{
+				dwa[0] = "";
+			}
+				try {
+							string trzy3 = DictExtension.GetValueOrDefault(myDict, "Customer ID3");
+			trzy = trzy3.Split(' ');
+			}
+			catch{
+				trzy[0] = "";
+			}
+				try {
+							string cztery4 = DictExtension.GetValueOrDefault(myDict, "Customer ID4");
+			cztery = cztery4.Split(' ');
+			}
+			catch{
+				cztery[0] = "";
+			}
+
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+			
+			if (excel.GetValueText(11, 4) == "Account ID" && excel.GetValueText(11, 7).Length > 1) {
+				for (int i = 11; i<20; i++) {
+					if (excel.GetValueText(11, 4) == "Account ID" && excel.GetValueText(i, 7) != "" && (excel.GetValueText(i, 7) == customerID || jeden.Contains(excel.GetValueText(i, 7)) || dwa.Contains(excel.GetValueText(i, 7)) || trzy.Contains(excel.GetValueText(i, 7)) || cztery.Contains(excel.GetValueText(i, 7)))) {
+						accountID[accountCount] = excel.GetValueText(i, 7);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 12);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 14);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 16);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 18);
+						accountCount++;
+						loopCount++;
+						acctinqCheck = true;
+					}
+				}
+			}
+//			headers[count] = excel.GetValueText(start + 12, 6);
+//			values[count] = excel.GetValueText(start + 12, 9);
+			myDict.Add(excel.GetValueText(start + 6, 6), excel.GetValueText(start + 6, 9));
+			count++;
+//			headers[count] = excel.GetValueText(start + 12, 14);
+//			values[count] = excel.GetValueText(start + 12, 16);
+			myDict.Add(excel.GetValueText(start + 6, 14), excel.GetValueText(start + 6, 16));
+			count++;
+//			headers[count] = excel.GetValueText(start + 12, 19);
+//			values[count] = excel.GetValueText(start + 12, 20);
+			myDict.Add(excel.GetValueText(start + 6, 19), excel.GetValueText(start + 6, 20));
+
+
+			//			string r = excel.GetValueText(start + 2, 7);
+			//			//			string filePath = Microsoft.VisualBasic.Interaction.InputBox("Enter file path \n Example: "+@"C:/Users/HC33CL/Downloads/5.pdf", "File Path");
+			//			//			  //C:\Users\HC33CL\Downloads\B.xlsx
+
+			//			//			string currentSheet = "document";
+			//			foreach (string item in accountID) {
+			//				if (item != "")
+			//					System.Console.WriteLine(item);
+			//			}
+			//			System.Console.WriteLine("Account ID");
+			//			foreach (string item in department) {
+			//				System.Console.WriteLine(item + "/n");
+			//			}
+			//			System.Console.WriteLine("Department");
+			//			int o = 0;
+			//			foreach (string item in headers) {
+			//				System.Console.WriteLine(item + "  - " + values[o]);
+			//				o++;
+			//			}
+
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+			//			return myDict;
+			System.Console.WriteLine(acctinqCheck);
+			
+			int screenCount = 1;
+			GbsInterface gbsinterface = new GbsInterface();
+			GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+			GbsInterface.SetText(gbs, 4, 24, "N");
+			GbsInterface.SetText(gbs, 5, 24, "Y");
+
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			screenCount++;
+			bool check = true;
+			count = 7;
+			int rowCount = 7;
+			int pageCount = 0;
+			string numberFC, amountGBS;
+			while (check) {
+				gbs.WaitUnlock();
+				numberFC = gbsinterface.GetText(gbs, count, 71, 8);
+				gbs.WaitUnlock();
+				GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+				gbs.WaitUnlock();
+				gbs.ExecOperation("SF10");
+				gbs.WaitUnlock();
+				GbsInterface.SetText(gbs, 1, 20, numberFC);
+				gbs.WaitUnlock();
+				gbs.ExecOperation("F1");
+				gbs.WaitUnlock();
+
+				amountGBS = gbsinterface.GetText(gbs, 16, 27, 23);
+				//				amountGBS = gbsinterface.GetText(gbs, rowCount, 32, 12);
+
+//								amountGBS = amountGBS.Replace(',', ' ');
+//								amountGBS = amountGBS.Replace('.', ',');
+				amountGBS = amountGBS.Trim();
+				//				System.Console.WriteLine("loopCount: " + loopCount);
+				//				System.Console.WriteLine("Amount Excel: " + (myDict["Outstanding / Time Amount"]));
+				if (myDict["Outstanding / Time Amount"] == amountGBS) {
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+
+					string gbsDepartment = gbsinterface.GetText(gbs, 1, 40, 11);
+					string gbsOfficer = gbsinterface.GetText(gbs, 1, 62, 8);
+
+					string gbsActive = gbsinterface.GetText(gbs, 3, 17, 1);
+					string gbsFacilityCCY = gbsinterface.GetText(gbs, 4, 17, 3);
+					string gbsMemo = gbsinterface.GetText(gbs, 7, 9, 20);
+					string gbsOwnershipBranch = gbsinterface.GetText(gbs, 8, 20, 2);
+
+					string gbsGraceDate = gbsinterface.GetText(gbs, 11, 19, 11);
+					string gbsLastRepayDate = gbsinterface.GetText(gbs, 12, 19, 11);
+					string gbsRepaymentType = gbsinterface.GetText(gbs, 13, 19, 1);
+					string gbsOutstandingTimeAmount = gbsinterface.GetText(gbs, 16, 26, 23);
+					string gbsReservedAmount = gbsinterface.GetText(gbs, 17, 26, 23);
+					string gbsNextFacility = gbsinterface.GetText(gbs, 20, 18, 15).Trim();
+					string gbsStartDate = gbsinterface.GetText(gbs, 5, 17, 11);
+
+					string gbsAggregationFacility = gbsinterface.GetText(gbs, 3, 65, 1);
+					string gbsStatus = gbsinterface.GetText(gbs, 4, 65, 10);
+					string gbsEndDate = gbsinterface.GetText(gbs, 5, 65, 11);
+					string gbsCustReference = gbsinterface.GetText(gbs, 7, 65, 10);
+					string gbsReportingBranch = gbsinterface.GetText(gbs, 8, 65, 2);
+
+					string gbsReviewDate = gbsinterface.GetText(gbs, 11, 65, 11);
+					string gbsMaturedAmountsAffect = gbsinterface.GetText(gbs, 12, 74, 1);
+					string gbsCheckOnline = gbsinterface.GetText(gbs, 20, 64, 1);
+
+					//fc 00081903
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+
+					string gbsIncludedGroup = gbsinterface.GetText(gbs, 1, 45, 20);
+					string gbsCustomerID1 = gbsinterface.GetText(gbs, 2, 16, 24);
+					string gbsCustomerID2 = gbsinterface.GetText(gbs, 3, 16, 24);
+					string gbsCustomerID3 = gbsinterface.GetText(gbs, 4, 16, 24);
+					string gbsCustomerID4 = gbsinterface.GetText(gbs, 5, 16, 24);
+					string gbsCustomerID5 = gbsinterface.GetText(gbs, 6, 16, 24);
+					string gbsCustomerID6 = gbsinterface.GetText(gbs, 7, 16, 24);
+
+
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+
+					string gbsCrType1 = gbsinterface.GetText(gbs, 2, 16, 11).Trim();
+					string gbsCrType2 = gbsinterface.GetText(gbs, 3, 16, 11).Trim();
+					string gbsCrType3 = gbsinterface.GetText(gbs, 4, 16, 11).Trim();
+
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+
+					string gbsInitiatingOffice = gbsinterface.GetText(gbs, 11, 27, 10);
+					string gbsMeasure = gbsinterface.GetText(gbs, 14, 38, 10);
+					string gbsProbationStartDate = gbsinterface.GetText(gbs, 15, 38, 10);
+					string gbsStartDateFor = gbsinterface.GetText(gbs, 16, 38, 10);
+					string gbsStatusFor = gbsinterface.GetText(gbs, 17, 38, 10);
+					string gbsOnlineAccount = gbsinterface.GetText(gbs, 5, 58, 1);
+
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+					GbsInterface.SetText(gbs, 4, 24, "N");
+					GbsInterface.SetText(gbs, 5, 24, "Y");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					GbsInterface.SetText(gbs, count, 1, "1");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+
+					GbsInterface.SetText(gbs, 0, 2, "FLI*INQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					GbsInterface.SetText(gbs, 2, 22, numberFC);
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+
+					string gbsApprovalDate = gbsinterface.GetText(gbs, 2, 60, 11);
+					string gbsOffExpiry = gbsinterface.GetText(gbs, 4, 60, 11);
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+
+					string currencyList1 = gbsinterface.GetText(gbs, 9, 4, 3);
+					string currencyList2 = gbsinterface.GetText(gbs, 9, 12, 3);
+					string currencyList3 = gbsinterface.GetText(gbs, 9, 20, 3);
+					string currencyList4 = gbsinterface.GetText(gbs, 9, 28, 3);
+					string currencyList5 = gbsinterface.GetText(gbs, 9, 36, 3);
+					string subBranch = gbsinterface.GetText(gbs, 5, 4, 6);
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+
+					string gbsDrawingPeriodStart = gbsinterface.GetText(gbs, 6, 26, 11);
+					string gbsMinTenor = gbsinterface.GetText(gbs, 8, 26, 5);
+					string gbsMaximumDrawAmount = gbsinterface.GetText(gbs, 11, 26, 23);
+					string gbsMinimumDrawAmount = gbsinterface.GetText(gbs, 12, 26, 23);
+					string gbsDrawingPeriodEnd = gbsinterface.GetText(gbs, 6, 68, 11);
+					string gbsMaximumNoticePeriod = gbsinterface.GetText(gbs, 7, 68, 6);
+					string gbsMaxTenor = gbsinterface.GetText(gbs, 8, 68, 5);
+					string gbsRevolving = gbsinterface.GetText(gbs, 15, 48, 1);
+					string gbsCommitted = gbsinterface.GetText(gbs, 16, 48, 1);
+					string gbsFacilityType = gbsinterface.GetText(gbs, 19, 59, 3);
+					string gbsFacilitypurpose = gbsinterface.GetText(gbs, 20, 62, 2);
+					string gbsContractualMaturity = gbsinterface.GetText(gbs, 21, 66, 1);
+
+
+
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					accountCount = 0;
+
+					string gbsBusinesType0 = "";
+					string gbsBusinesType1 = "";
+					string gbsBusinesType2 = "";
+					string gbsBusinesType3 = "";
+					string gbsBusinesType4 = "";
+
+					string gbsNegativeBalanceAllowed1 = "";
+					string gbsDepart1 = "";
+					string gbsAlternativeAdress1 = "";
+					string gbsReleaseCheck1 = "";
+					string gbsAccountIntraDayLimits1 = "";
+					string gbsAdvisedAmount1 = "";
+					string gbsFacilityIdFC1 = "";
+
+					string gbsNegativeBalanceAllowed2 = "";
+					string gbsDepart2 = "";
+					string gbsAlternativeAdress2 = "";
+					string gbsReleaseCheck2 = "";
+					string gbsAccountIntraDayLimits2 = "";
+					string gbsAdvisedAmount2 = "";
+					string gbsFacilityIdFC2 = "";
+
+					string gbsNegativeBalanceAllowed3 = "";
+					string gbsDepart3 = "";
+					string gbsAlternativeAdress3 = "";
+					string gbsReleaseCheck3 = "";
+					string gbsAccountIntraDayLimits3 = "";
+					string gbsAdvisedAmount3 = "";
+					string gbsFacilityIdFC3 = "";
+
+					string gbsNegativeBalanceAllowed4 = "";
+					string gbsDepart4 = "";
+					string gbsAlternativeAdress4 = "";
+					string gbsReleaseCheck4 = "";
+					string gbsAccountIntraDayLimits4 = "";
+					string gbsAdvisedAmount4 = "";
+					string gbsFacilityIdFC4 = "";
+
+					string gbsNegativeBalanceAllowed5 = "";
+					string gbsDepart5 = "";
+					string gbsAlternativeAdress5 = "";
+					string gbsReleaseCheck5 = "";
+					string gbsAccountIntraDayLimits5 = "";
+					string gbsAdvisedAmount5 = "";
+					string gbsFacilityIdFC5 = "";
+
+					string gbsRateCode1 = "";
+					string gbsRateCode2 = "";
+					string gbsRateCode3 = "";
+					string gbsSpread1 = "";
+					string gbsSpread2 = "";
+					string gbsSpread3 = "";
+					//					string gbsBusinessType = "";
+					//					string gbsDepartm = "";
+					//					string gbsNegativeBalance = "";
+					string gbsBalanceType1 = "";
+					string gbsEffectiveDate1 = "";
+					string gbsExpirationDate1 = "";
+					string gbsChargePayCustomer1 = "";
+					string gbsTiming1 = "";
+					string gbsAdj1 = "";
+					string gbsBasis1 = "";
+					string gbsCcy1 = "";
+					string gbsBalanceType2 = "";
+					string gbsEffectiveDate2 = "";
+					string gbsExpirationDate2 = "";
+					string gbsChargePayCustomer2 = "";
+					string gbsTiming2 = "";
+					string gbsAdj2 = "";
+					string gbsBasis2 = "";
+					string gbsCcy2 = "";
+					string gbsBalanceType3 = "";
+					string gbsEffectiveDate3 = "";
+					string gbsExpirationDate3 = "";
+					string gbsChargePayCustomer3 = "";
+					string gbsTiming3 = "";
+					string gbsAdj3 = "";
+					string gbsBasis3 = "";
+					string gbsCcy3 = "";
+
+					GbsInterface.SetText(gbs, 0, 2, "ACCTINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					gbs.WaitUnlock();
+
+					if (loopCount>0 && acctinqCheck) {
+						for (int i = 0; i<loopCount; i++) {
+							GbsInterface.SetText(gbs, 0, 1, "ACCTINQ");
+							gbs.WaitUnlock();
+							gbs.ExecOperation("SF10");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 1, 14, "D");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 1, 21, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 1, 47, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 1, 56, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 1, 64, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 1, 74, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							gbs.ExecOperation("F1");
+							gbs.WaitUnlock();
+							if (i == 0)
+								gbsBusinesType0 = gbsinterface.GetText(gbs, 12, 69, 9);
+							else if (i == 1)
+								gbsBusinesType1 = gbsinterface.GetText(gbs, 12, 69, 9);
+							else if (i == 2)
+								gbsBusinesType2 = gbsinterface.GetText(gbs, 12, 69, 9);
+							else if (i == 3)
+								gbsBusinesType3 = gbsinterface.GetText(gbs, 12, 69, 9);
+							else if (i == 4)
+								gbsBusinesType4 = gbsinterface.GetText(gbs, 12, 69, 9);
+
+							if (i == 0) {
+								gbsNegativeBalanceAllowed1 = gbsinterface.GetText(gbs, 9, 29, 1);
+								gbsDepart1 = gbsinterface.GetText(gbs, 16, 41, 4);
+								gbsAlternativeAdress1 = gbsinterface.GetText(gbs, 18, 20, 3);
+								gbs.WaitUnlock();
+							}
+							if (i == 1) {
+								gbsNegativeBalanceAllowed2 = gbsinterface.GetText(gbs, 9, 29, 1);
+								gbsDepart2 = gbsinterface.GetText(gbs, 16, 41, 4);
+								gbsAlternativeAdress2 = gbsinterface.GetText(gbs, 18, 20, 3);
+								gbs.WaitUnlock();
+							}
+							if (i == 2) {
+								gbsNegativeBalanceAllowed3 = gbsinterface.GetText(gbs, 9, 29, 1);
+								gbsDepart3 = gbsinterface.GetText(gbs, 16, 41, 4);
+								gbsAlternativeAdress3 = gbsinterface.GetText(gbs, 18, 20, 3);
+								gbs.WaitUnlock();
+							}
+							if (i == 3) {
+								gbsNegativeBalanceAllowed4 = gbsinterface.GetText(gbs, 9, 29, 1);
+								gbsDepart4 = gbsinterface.GetText(gbs, 16, 41, 4);
+								gbsAlternativeAdress4 = gbsinterface.GetText(gbs, 18, 20, 3);
+								gbs.WaitUnlock();
+							}
+							if (i == 4) {
+								gbsNegativeBalanceAllowed5 = gbsinterface.GetText(gbs, 9, 29, 1);
+								gbsDepart5 = gbsinterface.GetText(gbs, 16, 41, 4);
+								gbsAlternativeAdress5 = gbsinterface.GetText(gbs, 18, 20, 3);
+								gbs.WaitUnlock();
+							}
+
+							ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+							gbs.WaitUnlock();
+							screenCount++;
+							gbs.WaitUnlock();
+							gbs.ExecOperation("F1");
+							gbs.WaitUnlock();
+
+							if (i == 0) {
+								gbsReleaseCheck1 = gbsinterface.GetText(gbs, 8, 27, 1);
+								gbsAccountIntraDayLimits1 = gbsinterface.GetText(gbs, 14, 27, 1);
+								gbsAdvisedAmount1 = gbsinterface.GetText(gbs, 15, 32, 23);
+								gbsFacilityIdFC1 = gbsinterface.GetText(gbs, 19, 47, 8);
+								gbs.WaitUnlock();
+							}
+							if (i == 1) {
+								gbsReleaseCheck2 = gbsinterface.GetText(gbs, 8, 27, 1);
+								gbsAccountIntraDayLimits2 = gbsinterface.GetText(gbs, 14, 27, 1);
+								gbsAdvisedAmount2 = gbsinterface.GetText(gbs, 15, 32, 23);
+								gbsFacilityIdFC2 = gbsinterface.GetText(gbs, 19, 47, 8);
+								gbs.WaitUnlock();
+							}
+							if (i == 2) {
+								gbsReleaseCheck3 = gbsinterface.GetText(gbs, 8, 27, 1);
+								gbsAccountIntraDayLimits3 = gbsinterface.GetText(gbs, 14, 27, 1);
+								gbsAdvisedAmount3 = gbsinterface.GetText(gbs, 15, 32, 23);
+								gbsFacilityIdFC3 = gbsinterface.GetText(gbs, 19, 47, 8);
+								gbs.WaitUnlock();
+							}
+							if (i == 3) {
+								gbsReleaseCheck4 = gbsinterface.GetText(gbs, 8, 27, 1);
+								gbsAccountIntraDayLimits4 = gbsinterface.GetText(gbs, 14, 27, 1);
+								gbsAdvisedAmount4 = gbsinterface.GetText(gbs, 15, 32, 23);
+								gbsFacilityIdFC4 = gbsinterface.GetText(gbs, 19, 47, 8);
+								gbs.WaitUnlock();
+							}
+							if (i == 4) {
+								gbsReleaseCheck5 = gbsinterface.GetText(gbs, 8, 27, 1);
+								gbsAccountIntraDayLimits5 = gbsinterface.GetText(gbs, 14, 27, 1);
+								gbsAdvisedAmount5 = gbsinterface.GetText(gbs, 15, 32, 23);
+								gbsFacilityIdFC5 = gbsinterface.GetText(gbs, 19, 47, 8);
+								gbs.WaitUnlock();
+							}
+							ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+							gbs.WaitUnlock();
+							screenCount++;
+						}
+					}
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 0, 1, "AMRTINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					gbs.WaitUnlock();
+
+					accountCount = 0;
+//					System.Console.WriteLine(myDict["Balance type6page"].Length);
+					if (loopCount>0 && DictExtension.GetValueOrDefault(myDict, "Balance type6page").Length > 1 && acctinqCheck) {
+						for (int i = 0; i<loopCount; i++) {
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 0, 2, "AMRTINQ");
+							gbs.WaitUnlock();
+							gbs.ExecOperation("SF10");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 3, 5, "D");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 3, 12, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 38, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 47, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 55, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 65, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 4, 20, DictExtension.GetValueOrDefault(myDict, "Balance type6page"));
+							gbs.WaitUnlock();
+							gbs.ExecOperation("F1");
+							gbs.WaitUnlock();
+							ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+							screenCount++;
+//					int add = loopCount + 1;
+							System.Console.WriteLine(loopCount);
+							if (i == 0) {
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code  6page1"].ToUpper()){
+										gbsRateCode1 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread1 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbs.WaitUnlock();
+										GbsInterface.SetText(gbs, j, 2, "1");
+										gbs.WaitUnlock();
+										gbs.ExecOperation("F1");
+										gbs.WaitUnlock();
+										gbsBalanceType1 = gbsinterface.GetText(gbs, 3, 20, 2);
+										gbsEffectiveDate1 = gbsinterface.GetText(gbs, 4, 23, 11);
+										gbsExpirationDate1 = gbsinterface.GetText(gbs, 4, 54, 11);
+										gbsChargePayCustomer1 = gbsinterface.GetText(gbs, 17, 31, 2);
+										gbsTiming1 = gbsinterface.GetText(gbs, 17, 43, 6);
+										gbsAdj1 = gbsinterface.GetText(gbs, 17, 56, 2);
+										gbsBasis1 = gbsinterface.GetText(gbs, 7, 36, 2);
+										gbsCcy1 = gbsinterface.GetText(gbs, 2, 47, 3);
+										j = 20;
+									}
+								}
+							}
+							else if (i==1){
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code  6page2"].ToUpper()){
+										gbsRateCode2 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread2 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbs.WaitUnlock();
+										GbsInterface.SetText(gbs, j, 2, "1");
+										gbs.WaitUnlock();
+										gbs.ExecOperation("F1");
+										gbs.WaitUnlock();
+										gbsBalanceType2 = gbsinterface.GetText(gbs, 3, 20, 2);
+										gbsEffectiveDate2 = gbsinterface.GetText(gbs, 4, 23, 11);
+										gbsExpirationDate2 = gbsinterface.GetText(gbs, 4, 54, 11);
+										gbsChargePayCustomer2 = gbsinterface.GetText(gbs, 17, 31, 2);
+										gbsTiming2 = gbsinterface.GetText(gbs, 17, 43, 6);
+										gbsAdj2 = gbsinterface.GetText(gbs, 17, 56, 2);
+										gbsBasis2 = gbsinterface.GetText(gbs, 7, 36, 2);
+										gbsCcy2 = gbsinterface.GetText(gbs, 2, 47, 3);
+										j = 20;
+									}
+								}
+							}
+							else if (i==2){
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code  6page3"].ToUpper()){
+										gbsRateCode3 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread3 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbs.WaitUnlock();
+										GbsInterface.SetText(gbs, j, 2, "1");
+										gbs.WaitUnlock();
+										gbs.ExecOperation("F1");
+										gbs.WaitUnlock();
+										gbsBalanceType3 = gbsinterface.GetText(gbs, 3, 20, 2);
+										gbsEffectiveDate3 = gbsinterface.GetText(gbs, 4, 23, 11);
+										gbsExpirationDate3 = gbsinterface.GetText(gbs, 4, 54, 11);
+										gbsChargePayCustomer3 = gbsinterface.GetText(gbs, 17, 31, 2);
+										gbsTiming3 = gbsinterface.GetText(gbs, 17, 43, 6);
+										gbsAdj3 = gbsinterface.GetText(gbs, 17, 56, 2);
+										gbsBasis3 = gbsinterface.GetText(gbs, 7, 36, 2);
+										gbsCcy3 = gbsinterface.GetText(gbs, 2, 47, 3);
+										j = 20;
+									}
+								}
+							}
+						}
+					}
+
+					merge(resultPath + filename + "_newCheck", screenCount -1);
+					Microsoft.VisualBasic.Interaction.MsgBox("New facility checked");
+					string strFilePath = resultPath + filename + "comparation.csv";
+					string strSeperator = ";";
+					StringBuilder sbOutput = new StringBuilder();
+					string[][] inaOutput = new string[][] {
+						new string[] {
+							"Header", "GBSValues", "ExcelValues", "Status of Check"
+						},
+						new string[] {
+							"FacilityID", numberFC.Trim(), "", "=B2=C2"
+						},
+						new string[] {
+							"Customer ID", gbsCustomerID1.Trim(), customerID, "=B3=C3"
+						},
+						new string[] {
+							"Active", gbsActive.Trim(), DictExtension.GetValueOrDefault(myDict, "Active"), "=B4=C4"
+						},
+						new string[] {
+							"Facility CCY", gbsFacilityCCY.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility ccy"), "=B5=C5"
+						},
+						new string[] {
+							"Stat Date", gbsStartDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Start date"), "=B6=C6"
+						},
+						new string[] {
+							"ApprovalDate", gbsApprovalDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Approval date"), "=B7=C7"
+						},
+						new string[] {
+							"Memo", gbsMemo.Trim(), DictExtension.GetValueOrDefault(myDict, "Memo"), "=B8=C8"
+						},
+						new string[] {
+							"Ownership Branch", gbsOwnershipBranch.Trim(), DictExtension.GetValueOrDefault(myDict, "Ownership Branch"), "=B9=C9"
+						},
+						//						new string[] {
+						//							"Grace Date", gbsGraceDate.Trim(), myDict["Active"].Trim(), "=B10=C10"
+						//						},
+						//						new string[] {
+						//							"Last Repay Date", gbsLastRepayDate.Trim(), myDict["Active"].Trim(), "=B11=C11"
+						//						},
+						//						new string[] {
+						//							"Repayment Type", gbsRepaymentType.Trim(), myDict["Active"].Trim(), "=B12=C12"
+						//						},
+						new string[] {
+							"Reerved Amount", gbsReservedAmount.Trim(), DictExtension.GetValueOrDefault(myDict, "Reserved Amount"), "=B10=C10"
+						},
+						new string[] {
+							"Next Facility", gbsNextFacility.Trim(), DictExtension.GetValueOrDefault(myDict, "Next facility"), "=B11=C11"
+						},
+						new string[] {
+							"Aggregation Faciity", gbsAggregationFacility.Trim(), DictExtension.GetValueOrDefault(myDict, "Aggregate facilty"), "=B12=C12"
+						},
+						new string[] {
+							"Status", gbsStatus.Trim(), DictExtension.GetValueOrDefault(myDict, "Status"), "=B13=C13"
+						},
+						new string[] {
+							"End Date", gbsEndDate.Trim(), DictExtension.GetValueOrDefault(myDict, "End Date"), "=B14=C14"
+						},
+						new string[] {
+							"Off Expiry", gbsOffExpiry.Trim(), DictExtension.GetValueOrDefault(myDict, "Expiration date"), "=B15=C15"
+						},
+						new string[] {
+							"Customer Reference", gbsCustReference.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer reference"), "=B16=C16"
+						},
+						new string[] {
+							"Reporting Branch", gbsReportingBranch.Trim(), DictExtension.GetValueOrDefault(myDict, "Reporting branch"), "=B17=C17"
+						},
+						//						new string[] {
+						//							"Review Date", gbsReviewDate.Trim(), myDict["Active"].Trim(), "=B21=C21"
+						//						},
+						//						new string[] {
+						//							"Matured Amounts Affect", gbsMaturedAmountsAffect.Trim(), myDict["Active"].Trim(), "=B22=C22"
+						//						},
+						new string[] {
+							"Check Online", gbsCheckOnline.Trim(), DictExtension.GetValueOrDefault(myDict, "Check online?"), "=B18=C18"
+						},
+						new string[] {
+							"Included Group ", gbsIncludedGroup.Trim(), DictExtension.GetValueOrDefault(myDict, "Include group"), "=B19=C19"
+						},
+						new string[] {
+							"Customer ID1", gbsCustomerID1.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID1"), "=B20=C20"
+						},
+						new string[] {
+							"Customer ID2", gbsCustomerID2.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID2"), "=B21=C21"
+						},
+						new string[] {
+							"Customer ID3", gbsCustomerID3.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID3"), "=B22=C22"
+						},
+						new string[] {
+							"Customer ID4", gbsCustomerID4.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID4"), "=B23=C23"
+						},
+						new string[] {
+							"Customer ID5", gbsCustomerID5.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID5"), "=B24=C24"
+						},
+						new string[] {
+							"Customer ID6", gbsCustomerID6.Trim(), DictExtension.GetValueOrDefault(myDict, "Customer ID6"), "=B25=C25"
+						},
+						new string[] {
+							"CR Type1", gbsCrType1.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type1"), "=B26=C26"
+						},
+						new string[] {
+							"CR Type2", gbsCrType2.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type2"), "=B27=C27"
+						},
+						new string[] {
+							"CR Type3", gbsCrType3.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type3"), "=B28=C28"
+						},
+						new string[] {
+							"Currency List1", currencyList1.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list1"), "=B28=C28"
+						},
+						new string[] {
+							"Currency List2", currencyList2.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list2"), "=B29=C29"
+						},
+						new string[] {
+							"Currency List3", currencyList3.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list3"), "=B30=C30"
+						},
+						new string[] {
+							"Currency List4", currencyList4.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list4"), "=B31=C31"
+						},
+						new string[] {
+							"Currency List5", currencyList5.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list5"), "=B32=C32"
+						},
+						new string[] {
+							"Drawing Period Start", gbsDrawingPeriodStart.Trim(), DictExtension.GetValueOrDefault(myDict, "Drawing period start"), "=B33=C33"
+						},
+						new string[] {
+							"Minimum Tenor", gbsMinTenor.Trim(), DictExtension.GetValueOrDefault(myDict, "Minimum tenor"), "=B34=C34"
+						},
+						new string[] {
+							"Maximum Draw Amount", gbsMaximumDrawAmount.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum draw"), "=B35=C35"
+						},
+						new string[] {
+							"Minimum Draw Amount", gbsMinimumDrawAmount.Trim(), DictExtension.GetValueOrDefault(myDict, "Minimum draw"), "=B36=C36"
+						},
+						new string[] {
+							"Drawing Period End", gbsDrawingPeriodEnd.Trim(), DictExtension.GetValueOrDefault(myDict, "Drawing period end"), "=B37=C37"
+						},
+						new string[] {
+							"Maximum Notice Period", gbsMaximumNoticePeriod.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum Notice Period"), "=B38=C38"
+						},
+						new string[] {
+							"Maximum Tenor", gbsMaxTenor.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum tenor"), "=B39=C39"
+						},
+						new string[] {
+							"Revolving", gbsRevolving.Trim(), DictExtension.GetValueOrDefault(myDict, "Revolving"), "=B40=C40"
+						},
+						new string[] {
+							"Committed", gbsCommitted.Trim(), DictExtension.GetValueOrDefault(myDict, "Committed"), "=B41=C41"
+						},
+						new string[] {
+							"Facility type", gbsFacilityType.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility type"), "=B42=C42"
+						},
+						new string[] {
+							"Facility purpose", gbsFacilitypurpose.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility purpose"), "=B43=C43"
+						},
+						new string[] {
+							"Contractual Maturity", gbsContractualMaturity.Trim(), DictExtension.GetValueOrDefault(myDict, "Contractual Maturity"), "=B44=C44"
+						},
+						new string[] {
+							"Busines type1", gbsBusinesType0.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B45=C45"
+						},
+						new string[] {
+							"Negative balance allowed1", gbsNegativeBalanceAllowed1.Trim(), DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B46=C46"
+						},
+						new string[] {
+							"Department1", gbsDepart1.Trim(), DictExtension.GetValueOrDefault(myDict, "Department"), "=B47=C47"
+						},
+						new string[] {
+							"Alternative adress1", gbsAlternativeAdress1.Trim(), DictExtension.GetValueOrDefault(myDict, "Alternative adress"), "=B48=C48"
+						},
+						new string[] {
+							"Release Check1", gbsReleaseCheck1.Trim(), DictExtension.GetValueOrDefault(myDict, "Release W/O check"), "=B49=C49"
+						},
+						new string[] {
+							"Account Intraday Limits1", gbsAccountIntraDayLimits1.Trim(), DictExtension.GetValueOrDefault(myDict, "Account intraday limits"), "=B50=C50"
+						},
+						new string[] {
+							"Advised Amount1", gbsAdvisedAmount1.Trim(), DictExtension.GetValueOrDefault(myDict, "Advised amount"), "=B51=C51"
+						},
+
+						new string[] {
+							"Busines type2", gbsBusinesType1.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B45=C45"
+						},
+						new string[] {
+							"Negative balance allowed2", gbsNegativeBalanceAllowed1.Trim(), DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B46=C46"
+						},
+						new string[] {
+							"Department2", gbsDepart2.Trim(), DictExtension.GetValueOrDefault(myDict, "Department"), "=B47=C47"
+						},
+						new string[] {
+							"Alternative adress2", gbsAlternativeAdress2.Trim(), DictExtension.GetValueOrDefault(myDict, "Alternative adress"), "=B48=C48"
+						},
+						new string[] {
+							"Release Check2", gbsReleaseCheck2.Trim(), DictExtension.GetValueOrDefault(myDict, "Release W/O check"), "=B49=C49"
+						},
+						new string[] {
+							"Account Intraday Limits2", gbsAccountIntraDayLimits2.Trim(), DictExtension.GetValueOrDefault(myDict, "Account intraday limits"), "=B50=C50"
+						},
+						new string[] {
+							"Advised Amount2", gbsAdvisedAmount2.Trim(), DictExtension.GetValueOrDefault(myDict, "Advised amount"), "=B51=C51"
+						},
+
+						new string[] {
+							"Busines type3", gbsBusinesType2.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B45=C45"
+						},
+						new string[] {
+							"Negative balance allowed3", gbsNegativeBalanceAllowed3.Trim(), DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B46=C46"
+						},
+						new string[] {
+							"Department3", gbsDepart3.Trim(), DictExtension.GetValueOrDefault(myDict, "Department"), "=B47=C47"
+						},
+						new string[] {
+							"Alternative adress3", gbsAlternativeAdress3.Trim(), DictExtension.GetValueOrDefault(myDict, "Alternative adress"), "=B48=C48"
+						},
+						new string[] {
+							"Release Check3", gbsReleaseCheck3.Trim(), DictExtension.GetValueOrDefault(myDict, "Release W/O check"), "=B49=C49"
+						},
+						new string[] {
+							"Account Intraday Limits3", gbsAccountIntraDayLimits3.Trim(), DictExtension.GetValueOrDefault(myDict, "Account intraday limits"), "=B50=C50"
+						},
+						new string[] {
+							"Advised Amount3", gbsAdvisedAmount3.Trim(), DictExtension.GetValueOrDefault(myDict, "Advised amount"), "=B51=C51"
+						},
+
+						new string[] {
+							"Busines type4", gbsBusinesType3.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B45=C45"
+						},
+						new string[] {
+							"Negative balance allowed4", gbsNegativeBalanceAllowed4.Trim(), DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B46=C46"
+						},
+						new string[] {
+							"Department4", gbsDepart4.Trim(), DictExtension.GetValueOrDefault(myDict, "Department"), "=B47=C47"
+						},
+						new string[] {
+							"Alternative adress4", gbsAlternativeAdress4.Trim(), DictExtension.GetValueOrDefault(myDict, "Alternative adress"), "=B48=C48"
+						},
+						new string[] {
+							"Release Check4", gbsReleaseCheck4.Trim(), DictExtension.GetValueOrDefault(myDict, "Release W/O check"), "=B49=C49"
+						},
+						new string[] {
+							"Account Intraday Limits4", gbsAccountIntraDayLimits4.Trim(), DictExtension.GetValueOrDefault(myDict, "Account intraday limits"), "=B50=C50"
+						},
+						new string[] {
+							"Advised Amount4", gbsAdvisedAmount4.Trim(), DictExtension.GetValueOrDefault(myDict, "Advised amount"), "=B51=C51"
+						},
+
+						new string[] {
+							"Busines type5", gbsBusinesType4.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B45=C45"
+						},
+						new string[] {
+							"Negative balance allowed5", gbsNegativeBalanceAllowed5.Trim(), DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B46=C46"
+						},
+						new string[] {
+							"Department5", gbsDepart5.Trim(), DictExtension.GetValueOrDefault(myDict, "Department"), "=B47=C47"
+						},
+						new string[] {
+							"Alternative adress5", gbsAlternativeAdress5.Trim(), DictExtension.GetValueOrDefault(myDict, "Alternative adress"), "=B48=C48"
+						},
+						new string[] {
+							"Release Check5", gbsReleaseCheck5.Trim(), DictExtension.GetValueOrDefault(myDict, "Release W/O check"), "=B49=C49"
+						},
+						new string[] {
+							"Account Intraday Limits5", gbsAccountIntraDayLimits5.Trim(), DictExtension.GetValueOrDefault(myDict, "Account intraday limits"), "=B50=C50"
+						},
+						new string[] {
+							"Advised Amount5", gbsAdvisedAmount5.Trim(), DictExtension.GetValueOrDefault(myDict, "Advised amount"), "=B51=C51"
+						},
+						new string[] {
+								"Rate code1", gbsRateCode1, DictExtension.GetValueOrDefault(myDict, "Rate code6page1"), "=B52=C52"
+							},
+						new string[] {
+								"Rate code2", gbsRateCode2, DictExtension.GetValueOrDefault(myDict, "Rate code6page2"), "=B53=C53"
+							},
+						new string[] {
+								"Rate code3", gbsRateCode3, DictExtension.GetValueOrDefault(myDict, "Rate code6page3"), "=B54=C54"
+							},
+						new string[] {
+								"Spread1", gbsSpread1, DictExtension.GetValueOrDefault(myDict, "  Spread6page1"), "=B55=C55"
+							},
+						new string[] {
+								"Spread2", gbsSpread2, DictExtension.GetValueOrDefault(myDict, "  Spread6page2"), "=B56=C56"
+							},
+						new string[] {
+								"Spread3", gbsSpread3, DictExtension.GetValueOrDefault(myDict, "  Spread6page3"), "=B57=C57"
+							},
+						new string[] {
+								"Facility ID FC1", gbsFacilityIdFC1, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B58=C58"
+							},
+						new string[] {
+								"Facility ID FC2", gbsFacilityIdFC2, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B58=C58"
+							},
+						new string[] {
+								"Facility ID FC3", gbsFacilityIdFC3, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B58=C58"
+							},
+						new string[] {
+								"Facility ID FC4", gbsFacilityIdFC4, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B58=C58"
+							},
+						new string[] {
+								"Facility ID FC5", gbsFacilityIdFC5, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B58=C58"
+							},
+						new string[] {
+							"Busines type2", gbsBusinesType1.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B59=C59"
+						},
+						new string[] {
+							"Busines type3", gbsBusinesType2.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B60=C60"
+						},
+						new string[] {
+							"Busines type4", gbsBusinesType3.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B61=C61"
+						},
+						new string[] {
+							"Busines type5", gbsBusinesType4.Trim(), DictExtension.GetValueOrDefault(myDict, "Business type"), "=B62=C62"
+						},
+						new string[] {
+							"Outstanding / Time Amount", amountGBS.Trim(), DictExtension.GetValueOrDefault(myDict, "Outstanding / Time Amount"), "=B63=C63"
+						},
+						new string[] {
+							"Subbranch list", subBranch.Trim(), DictExtension.GetValueOrDefault(myDict, "Subbranch list"), "=B64=C64"
+						},
+						new string[] {
+							"Measure", gbsMeasure.Trim(), DictExtension.GetValueOrDefault(myDict, "Measure4page"), "=B65=C65"
+						},
+						new string[] {
+							"Probation Start Date", gbsProbationStartDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Probation Start Date4page"), "=B66=C66"
+						},
+						new string[] {
+							"Start date", gbsStartDateFor.Trim(), DictExtension.GetValueOrDefault(myDict, "Start date4page"), "=B67=C67"
+						},
+						new string[] {
+							"Status", gbsStatusFor.Trim(), DictExtension.GetValueOrDefault(myDict, "Status4page"), "=B68=C68"
+						},
+						new string[] {
+							"Effective Date 1", gbsEffectiveDate1.Trim(), DictExtension.GetValueOrDefault(myDict, "Effective date6page"), "=B69=C69"
+						},
+						new string[] {
+							"Expiration Date 1", gbsExpirationDate1.Trim(), DictExtension.GetValueOrDefault(myDict, "Expiration date6page"), "=B70=C70"
+						},
+						new string[] {
+							"Charge Pay Customer 1", gbsChargePayCustomer1.Trim(), DictExtension.GetValueOrDefault(myDict, "Charge / pay customer"), "=B71=C71"
+						},
+		 			 	new string[] {
+							"Timing 1", gbsTiming1.Trim(), DictExtension.GetValueOrDefault(myDict, "Timing"), "=B72=C72"
+						},
+						new string[] {
+							"Adj 1", gbsAdj1.Trim(), DictExtension.GetValueOrDefault(myDict, "Adj"), "=B73=C73"
+						},
+						new string[] {
+							"Basis 1", gbsBasis1.Trim(), DictExtension.GetValueOrDefault(myDict, "Basis6page"), "=B74=C74"
+						},
+						new string[] {
+							"Ccy 1", gbsCcy1.Trim(), DictExtension.GetValueOrDefault(myDict, "ccy6page1"), "=B75=C75"
+						},
+						new string[] {
+							"Balance Type 1", gbsBalanceType1.Trim(), DictExtension.GetValueOrDefault(myDict, "Balance type6page"), "=B75=C75"
+						},
+						new string[] {
+							"Effective Date 2", gbsEffectiveDate2.Trim(), DictExtension.GetValueOrDefault(myDict, "Effective date6page"), "=B76=C76"
+						},
+						new string[] {
+							"Expiration Date 2", gbsExpirationDate2.Trim(), DictExtension.GetValueOrDefault(myDict, "Expiration date6page"), "=B77=C77"
+						},
+						new string[] {
+							"Charge Pay Customer 2", gbsChargePayCustomer2.Trim(), DictExtension.GetValueOrDefault(myDict, "Charge / pay customer"), "=B78=C78"
+						},
+		 			 	new string[] {
+							"Timing 2", gbsTiming2.Trim(), DictExtension.GetValueOrDefault(myDict, "Timing"), "=B79=C79"
+						},
+						new string[] {
+							"Adj 2", gbsAdj2.Trim(), DictExtension.GetValueOrDefault(myDict, "Adj"), "=B80=C80"
+						},
+						new string[] {
+							"Basis 2", gbsBasis2.Trim(), DictExtension.GetValueOrDefault(myDict, "Basis6page"), "=B81=C81"
+						},
+						new string[] {
+							"Ccy 2", gbsCcy2.Trim(), DictExtension.GetValueOrDefault(myDict, "ccy6page2"), "=B82=C82"
+						},
+						new string[] {
+							"Balance Type 2", gbsBalanceType2.Trim(), DictExtension.GetValueOrDefault(myDict, "Balance type6page"), "=B83=C83"
+						},
+						new string[] {
+							"Effective Date 3", gbsEffectiveDate3.Trim(), DictExtension.GetValueOrDefault(myDict, "Effective date6page"), "=B84=C84"
+						},
+						new string[] {
+							"Expiration Date 3", gbsExpirationDate3.Trim(), DictExtension.GetValueOrDefault(myDict, "Expiration date6page"), "=B85=C85"
+						},
+						new string[] {
+							"Charge Pay Customer 3", gbsChargePayCustomer3.Trim(), DictExtension.GetValueOrDefault(myDict, "Charge / pay customer"), "=B86=C86"
+						},
+		 			 	new string[] {
+							"Timing 3", gbsTiming3.Trim(), DictExtension.GetValueOrDefault(myDict, "Timing"), "=B87=C87"
+						},
+						new string[] {
+							"Adj 3", gbsAdj3.Trim(), DictExtension.GetValueOrDefault(myDict, "Adj"), "=B88=C88"
+						},
+						new string[] {
+							"Basis 3", gbsBasis3.Trim(), DictExtension.GetValueOrDefault(myDict, "Basis6page"), "=B89=C89"
+						},
+						new string[] {
+							"Ccy 3", gbsCcy3.Trim(), DictExtension.GetValueOrDefault(myDict, "ccy6page3"), "=B90=C90"
+						},
+						new string[] {
+							"Balance Type 3", gbsBalanceType3.Trim(), DictExtension.GetValueOrDefault(myDict, "Balance type6page"), "=B91=C91"
+						},
+						new string[] {
+							"Online Account Overdraft Proces", gbsOnlineAccount.Trim(), DictExtension.GetValueOrDefault(myDict, "Online Account Overdraft processing"), "=B92=C92"
+						},
+						new string[] {
+							"Initiating officer", gbsInitiatingOffice.Trim(), DictExtension.GetValueOrDefault(myDict, "Initiating officer"), "=B93=C93"
+						},
+						new string[] {
+							"Department", gbsDepartment.Trim(), department[0].Trim() + " " + department[1].Trim(), "=B94=C94"
+						},
+						new string[] {
+							"Officer", gbsOfficer.Trim(), officer.Trim(), "=B95=C95"
+						},
+					};
+
+
+					int ilength = inaOutput.GetLength(0);
+					for (int i = 0; i < ilength; i++)
+						sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+					// Create and write the csv file
+					File.WriteAllText(strFilePath, sbOutput.ToString());
+
+					check = false;
+				}
+				else {
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 4, 24, "N");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 5, 24, "Y");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					count++;
+					rowCount++;
+					if (rowCount == 20 && gbsinterface.GetText(gbs, 21, 74, 1) == "Y") {
+						pageCount++;
+						rowCount = 7;
+						count = rowCount;
+					}
+					for (int i = 0; i< pageCount; i++) {
+						gbs.WaitUnlock();
+						gbs.ExecOperation("F1");
+						gbs.WaitUnlock();
+
+					}
+				}
+			}
+			//						System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= screenCount + 1; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+		}
+
+
+
+		public void FacilityChangeLimit(string id, dynamic gbs, string resultPath, string filename, string facilityIDPDF) {
+
+			//             C:\Users\HC33CL\Downloads\FC30033415 Limit Change Loan Guarantee 2021mar05_elmu.pdf
+			GbsInterface gbsinterface = new GbsInterface();
+			GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 2, 17, id);
+			GbsInterface.SetText(gbs, 4, 24, "N");
+			GbsInterface.SetText(gbs, 5, 24, "Y");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			bool check = true;
+			string numberFC;
+			int count = 7;
+			while (check) {
+				string page = gbsinterface.GetText(gbs, 21, 74, 1);
+				if (count == 20 && page == "Y") {
+					count = 7;
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+
+				}
+				numberFC = gbsinterface.GetText(gbs, count, 71, 8);
+				if (numberFC == facilityIDPDF) {
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck1");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, count, 1, "Y");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck2");
+					merge(resultPath + filename + "_newCheck", 2);
+					Microsoft.VisualBasic.Interaction.MsgBox("Change limit facility checked");
+					check = false;
+				}
+				else
+					count++;
+
+			}
+			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= 2; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+		}
+
+		public void updateFacility(dynamic gbs, string resultPath, string filename) {  //correct method
+
+			Excel excel = new Excel(false);
+			Dictionary<string, string> myDict = new Dictionary<string, string>();
+			Dictionary<string, string> dictCustomer = new Dictionary<string, string>();
+			int count = 0;
+			int start = 0;
+			string flag = "";
+
+			for (int i = 10; i<25; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FOVLUPDT/FOVLUPDV") {
+					start = i;
+					i = 25;
+				}
+			}
+
+			int accountCount = 0;
+			int loopCount = 0;
+			string[] accountID = new string[25];
+			bool acctinqCheck = false;
+			if (excel.GetValueText(11, 4) == "Account ID" && excel.GetValueText(11, 7).Length > 1) {
+				for (int i = 11; i<20; i++) {
+					if (excel.GetValueText(11, 4) == "Account ID" && excel.GetValueText(i, 7) != "") {
+						accountID[accountCount] = excel.GetValueText(i, 7);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 12);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 14);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 16);
+						accountCount++;
+						accountID[accountCount] = excel.GetValueText(i, 18);
+						accountCount++;
+						loopCount++;
+						acctinqCheck = true;
+					}
+				}
+			}
+			//Page1
+			myDict.Add(excel.GetValueText(6, 4), excel.GetValueText(6, 7));
+			string[] department = new string[2];
+			string facilityID = excel.GetValueText(start + 2, 7);
+			string customerID = excel.GetValueText(6, 7);
+			department[0] = excel.GetValueText(start + 4, 7);
+			department[1] = excel.GetValueText(start + 4, 12);
+			string officer = excel.GetValueText(start + 4, 25);
+			string[] values = new string[1000];
+			string[] headers = new string[1000];
+			for (int i = start + 6; i<start + 25; i++) {
+				if (excel.GetValueText(i, 4) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					count++;
+				}
+				if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 20) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+				else if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 23) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 23);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 23));
+					count++;
+				}
+				else if (excel.GetValueText(i, 14) != "") {
+					headers[count] = excel.GetValueText(i, 14);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 14), excel.GetValueText(i, 20));
+					count++;
+				}
+				else if (excel.GetValueText(i, 16) != "") {
+					headers[count] = excel.GetValueText(i, 16);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 16), excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+			//Page2
+			int customerIDcount = 1;
+			for (int i = start + 26; i<start + 33; i++) {
+				if (excel.GetValueText(i, 6) != "") {
+					headers[count] = excel.GetValueText(start + 26, 4);
+					values[count] = excel.GetValueText(i, 6);
+					myDict.Add(excel.GetValueText(start + 26, 4) + customerIDcount, excel.GetValueText(i, 6) + excel.GetValueText(i, 7));
+					count++;
+					customerIDcount++;
+					headers[count] = excel.GetValueText(start + 26, 4);
+					values[count] = excel.GetValueText(i, 7);
+					count++;
+				}
+				if (excel.GetValueText(i, 18) != "") {
+					headers[count] = excel.GetValueText(i, 18);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					count++;
+				}
+			}
+			//Page3
+			int crCount = 1;
+			for (int i = start + 33; i<start + 37; i++) {
+				if (excel.GetValueText(i, 7) != "" && excel.GetValueText(i, 7) != "(I LD LOANS, I LD GTYI, I LD LCI, I LD LCC, I AO OVDRFT)") {
+					headers[count] = excel.GetValueText(start + 33, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(start + 33, 4) + crCount, excel.GetValueText(i, 7));
+					count++;
+					crCount++;
+				}
+			}
+			//Page4
+			for (int i = start + 39; i<start + 54; i++) {
+				if (excel.GetValueText(i, 10) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 10);
+					myDict.Add(excel.GetValueText(i, 4) + "4page", excel.GetValueText(i, 10));
+					count++;
+				}
+				else if (excel.GetValueText(i, 7) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 10);
+					myDict.Add(excel.GetValueText(i, 4) + "4page", excel.GetValueText(i, 7));
+					count++;
+				}
+			}
+
+			//FCRCUPDT/FCRCUPDV
+			for (int i = 60; i<90; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FCRCUPDT/FCRCUPDV") {
+					start = i;
+					i = 90;
+				}
+			}
+
+			int contactCountA = 1;
+			int contactCountB = 1;
+
+			for (int i = start + 2; i<start + 9; i++) {
+				if (excel.GetValueText(i, 4) != "") {
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4) + contactCountA + "A", excel.GetValueText(i, 7));
+					count++;
+					contactCountA++;
+				}
+				if (excel.GetValueText(i, 17) != "") {
+					headers[count] = excel.GetValueText(i, 17);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 17) + contactCountB + "B", excel.GetValueText(i, 20));
+					count++;
+					contactCountB++;
+				}
+			}
+
+			//FLI*UPDT/FLI*UPDV
+			for (int i = 65; i<100; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FLI*UPDT/FLI*UPDV") {
+					start = i;
+					i = 100;
+				}
+			}
+
+			headers[count] = excel.GetValueText(start + 3, 4);
+			values[count] = excel.GetValueText(start + 3, 7);
+			myDict.Add(excel.GetValueText(start + 3, 4) + "6page", excel.GetValueText(start + 3, 7));
+			count++;
+			headers[count] = excel.GetValueText(start + 3, 18);
+			values[count] = excel.GetValueText(start + 3, 20);
+			myDict.Add(excel.GetValueText(start + 3, 18), excel.GetValueText(start + 3, 20));
+			count++;
+
+			int subbranchesCount = 1;
+			for (int i = 6; i <22; i++) {
+				if (excel.GetValueText((start + 9), i) != "" && excel.GetValueText((start + 9), i) != "I") {
+					headers[count] = excel.GetValueText(start + 9, i - 1);
+					values[count] = excel.GetValueText(start + 9, i);
+					myDict.Add("Available to subbranches of this branch:" + subbranchesCount, excel.GetValueText(start + 9, i));
+					subbranchesCount++;
+					count++;
+				}
+			}
+			int currencyListCountI = 1;
+			for (int i = 5; i <24; i++) {
+				if (excel.GetValueText(start + 13, i) != "" && excel.GetValueText(start + 13, i) != "I") {
+					headers[count] = excel.GetValueText(start + 13, i - 1);
+					values[count] = excel.GetValueText(start + 13, i);
+					myDict.Add("Currency list" + currencyListCountI + "I", excel.GetValueText(start + 13, i));
+					currencyListCountI++;
+					count++;
+				}
+			}
+			int currencyListCountE = 1;
+			for (int i = 5; i <24; i++) {
+				if (excel.GetValueText(start + 15, i) != "" && excel.GetValueText(start + 15, i) != "E") {
+					headers[count] = excel.GetValueText(start + 15, i - 1);
+					values[count] = excel.GetValueText(start + 15, i);
+					myDict.Add("Currency list" + currencyListCountE + "E", excel.GetValueText(start + 15, i));
+					currencyListCountE++;
+					count++;
+				}
+			}
+
+			for (int i = start + 19; i<start + 42; i++) {
+				if (excel.GetValueText(i, 4) != "") {
+					if (i == i + 21 || i == i + 23) {
+						headers[count] = excel.GetValueText(i, 4);
+						values[count] = excel.GetValueText(i, 7);
+						myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7) + " " + excel.GetValueText(i, 9));
+						count++;
+						headers[count] = excel.GetValueText(i, 4);
+						values[count] = excel.GetValueText(i, 9);
+						count++;
+					}
+					headers[count] = excel.GetValueText(i, 4);
+					values[count] = excel.GetValueText(i, 7);
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					count++;
+				}
+				if (excel.GetValueText(i, 16) != "") {
+					if (i == i + 21 || i == i + 23) {
+						headers[count] = excel.GetValueText(i, 16);
+						values[count] = excel.GetValueText(i, 22);
+						myDict.Add(excel.GetValueText(i, 16), excel.GetValueText(i, 20) + " " + excel.GetValueText(i, 22));
+						count++;
+						headers[count] = excel.GetValueText(i, 16);
+						values[count] = excel.GetValueText(i, 22);
+						count++;
+					}
+					headers[count] = excel.GetValueText(i, 16);
+					values[count] = excel.GetValueText(i, 20);
+					myDict.Add(excel.GetValueText(i, 16), excel.GetValueText(i, 20));
+					count++;
+				}
+				if (i>start + 30) {
+					if (excel.GetValueText(i, 4) != "") {
+						headers[count] = excel.GetValueText(i, 4);
+						values[count] = excel.GetValueText(i, 10);
+						myDict.Add(excel.GetValueText(i, 4) +"6page", excel.GetValueText(i, 10));
+						count++;
+					}
+					if (excel.GetValueText(i, 16) != "") {
+						headers[count] = excel.GetValueText(i, 16);
+						values[count] = excel.GetValueText(i, 20);
+						myDict.Add(excel.GetValueText(i, 16) + "6page", excel.GetValueText(i, 20));
+						count++;
+					}
+					if(excel.GetValueText(i, 12) != "") {
+						myDict.Add(excel.GetValueText(i, 12) + "6page", excel.GetValueText(i, 20));
+					}
+				}
+			}
+			//			foreach (string item in accountID) {
+			//				if (item != "")
+			//					System.Console.WriteLine(item);
+			//			}
+			//			System.Console.WriteLine("Account ID");
+			//			foreach (string item in department) {
+			//				System.Console.WriteLine(item + "/n");
+			//			}
+			//			System.Console.WriteLine("Department");
+			int o = 0;
+			foreach (string item in headers) {
+				System.Console.WriteLine(item + "  - " + values[o]);
+				o++;
+			}
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+			//			return myDict;
+
+			int screenCount = 1;
+			GbsInterface gbsinterface = new GbsInterface();
+			GbsInterface.SetText(gbs, 0, 2, "FOVLINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 1, 20, facilityID);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			screenCount++;
+
+			string gbsDepartment = gbsinterface.GetText(gbs, 1, 40, 11);
+			string gbsOfficer = gbsinterface.GetText(gbs, 1, 62, 8);
+			string gbsActive = gbsinterface.GetText(gbs, 3, 17, 1);
+			string gbsFacilityCCY = gbsinterface.GetText(gbs, 4, 17, 3);
+			string gbsMemo = gbsinterface.GetText(gbs, 7, 9, 20);
+			string gbsOwnershipBranch = gbsinterface.GetText(gbs, 8, 20, 2);
+
+			string gbsGraceDate = gbsinterface.GetText(gbs, 11, 19, 11);
+			string gbsLastRepayDate = gbsinterface.GetText(gbs, 12, 19, 11);
+			string gbsRepaymentType = gbsinterface.GetText(gbs, 13, 19, 1);
+			string gbsOutstandingTimeAmount = gbsinterface.GetText(gbs, 16, 26, 23);
+			string gbsReservedAmount = gbsinterface.GetText(gbs, 17, 26, 23);
+			string gbsNextFacility = gbsinterface.GetText(gbs, 20, 18, 15).Trim();
+
+			string gbsAggregationFacility = gbsinterface.GetText(gbs, 3, 65, 1);
+			string gbsStatus = gbsinterface.GetText(gbs, 4, 65, 10);
+			string gbsEndDate = gbsinterface.GetText(gbs, 5, 65, 11);
+			string gbsCustReference = gbsinterface.GetText(gbs, 7, 65, 10);
+			string gbsReportingBranch = gbsinterface.GetText(gbs, 8, 65, 2);
+
+			string gbsReviewDate = gbsinterface.GetText(gbs, 11, 65, 11);
+			string gbsMaturedAmountsAffect = gbsinterface.GetText(gbs, 12, 74, 1);
+			string gbsCheckOnline = gbsinterface.GetText(gbs, 20, 64, 1);
+			string gbsOffExpiry = gbsinterface.GetText(gbs, 6, 65, 11);
+
+
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			screenCount++;
+			gbs.WaitUnlock();
+			string gbsFacilityID = gbsinterface.GetText(gbs, 1, 19, 8);
+			string gbsIncludedGroup = gbsinterface.GetText(gbs, 1, 45, 20);
+			string gbsCustomerID1 = gbsinterface.GetText(gbs, 2, 16, 24);
+			string gbsCustomerID2 = gbsinterface.GetText(gbs, 3, 16, 24);
+			string gbsCustomerID3 = gbsinterface.GetText(gbs, 4, 16, 24);
+			string gbsCustomerID4 = gbsinterface.GetText(gbs, 5, 16, 24);
+			string gbsCustomerID5 = gbsinterface.GetText(gbs, 6, 16, 24);
+			string gbsCustomerID6 = gbsinterface.GetText(gbs, 7, 16, 24);
+			dictCustomer.Add("Customer ID1", gbsinterface.GetText(gbs, 2, 16, 24));
+			dictCustomer.Add("Customer ID2", gbsinterface.GetText(gbs, 3, 16, 24));
+			dictCustomer.Add("Customer ID3", gbsinterface.GetText(gbs, 4, 16, 24));
+			dictCustomer.Add("Customer ID4", gbsinterface.GetText(gbs, 5, 16, 24));
+			dictCustomer.Add("Customer ID5", gbsinterface.GetText(gbs, 6, 16, 24));
+
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			screenCount++;
+
+			string gbsCrType1 = gbsinterface.GetText(gbs, 2, 16, 11).Trim();
+			string gbsCrType2 = gbsinterface.GetText(gbs, 3, 16, 11).Trim();
+			string gbsCrType3 = gbsinterface.GetText(gbs, 4, 16, 11).Trim();
+
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			screenCount++;
+
+			string gbsInitiatingOffice = gbsinterface.GetText(gbs, 11, 27, 10);
+			string gbsDerecognition = gbsinterface.GetText(gbs, 12, 27, 10);
+			string gbsMeasure = gbsinterface.GetText(gbs, 14, 38, 10);
+			string gbsProbationStartDate = gbsinterface.GetText(gbs, 15, 38, 10);
+			string gbsStartDateFor = gbsinterface.GetText(gbs, 16, 38, 10);
+			string gbsStatusFor = gbsinterface.GetText(gbs, 17, 38, 10);
+			string gbsOnlineAccount =  gbsinterface.GetText(gbs, 5, 58, 1);
+			gbs.WaitUnlock();
+
+			GbsInterface.SetText(gbs, 0, 2, "FLI*INQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			GbsInterface.SetText(gbs, 2, 22, facilityID);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			gbs.WaitUnlock();
+			screenCount++;
+
+			string gbsStartDate = gbsinterface.GetText(gbs, 4, 20, 11);
+			string gbsApprovalDate = gbsinterface.GetText(gbs, 2, 60, 11);
+			string gbsExpiryDate = gbsinterface.GetText(gbs, 4, 60, 11);
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+
+			string currencyList1 = gbsinterface.GetText(gbs, 9, 4, 3);
+			string currencyList2 = gbsinterface.GetText(gbs, 9, 12, 3);
+			string currencyList3 = gbsinterface.GetText(gbs, 9, 20, 3);
+			string currencyList4 = gbsinterface.GetText(gbs, 9, 28, 3);
+			string currencyList5 = gbsinterface.GetText(gbs, 9, 36, 3);
+			string currencyList6 = gbsinterface.GetText(gbs, 9, 44, 3);
+			string currencyList7 = gbsinterface.GetText(gbs, 9, 52, 3);
+			string currencyList8 = gbsinterface.GetText(gbs, 9, 60, 3);
+			string currencyList9 = gbsinterface.GetText(gbs, 9, 68, 3);
+			string currencyList10 = gbsinterface.GetText(gbs, 9, 76, 3);
+			string currencyList11 = gbsinterface.GetText(gbs, 10, 4, 3);
+			string currencyList12 = gbsinterface.GetText(gbs, 10, 12, 3);
+			string currencyList13 = gbsinterface.GetText(gbs, 10, 20, 3);
+			string currencyList14 = gbsinterface.GetText(gbs, 10, 28, 3);
+			string currencyList15 = gbsinterface.GetText(gbs, 10, 36, 3);
+			string currencyList16 = gbsinterface.GetText(gbs, 10, 44, 3);
+			string currencyList17 = gbsinterface.GetText(gbs, 10, 52, 3);
+			string currencyList18 = gbsinterface.GetText(gbs, 10, 60, 3);
+			string currencyList19 = gbsinterface.GetText(gbs, 10, 68, 3);
+			string currencyList20 = gbsinterface.GetText(gbs, 10, 76, 3);
+
+			string subBranch1 = gbsinterface.GetText(gbs, 5, 4, 6);
+			string subBranch2 = gbsinterface.GetText(gbs, 5, 15, 6);
+			string subBranch3 = gbsinterface.GetText(gbs, 5, 26, 6);
+			string subBranch4 = gbsinterface.GetText(gbs, 5, 37, 6);
+
+			string FacilityIDGBS = gbsinterface.GetText(gbs, 1, 20, 8);
+
+
+			gbs.WaitUnlock();
+			screenCount++;
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+			gbs.WaitUnlock();
+
+			string gbsDrawingPeriodStart = gbsinterface.GetText(gbs, 6, 26, 11);
+			string gbsMinTenor = gbsinterface.GetText(gbs, 8, 26, 5);
+			string gbsMaximumDrawAmount = gbsinterface.GetText(gbs, 11, 26, 23);
+			string gbsMinimumDrawAmount = gbsinterface.GetText(gbs, 12, 26, 23);
+			string gbsDrawingPeriodEnd = gbsinterface.GetText(gbs, 6, 68, 11);
+			string gbsMaximumNoticePeriod = gbsinterface.GetText(gbs, 7, 68, 6);
+			string gbsMaxTenor = gbsinterface.GetText(gbs, 8, 68, 5);
+			string gbsRevolving = gbsinterface.GetText(gbs, 15, 48, 1);
+			string gbsCommitted = gbsinterface.GetText(gbs, 16, 48, 1);
+			string gbsFacilityType = gbsinterface.GetText(gbs, 19, 59, 3);
+			string gbsFacilitypurpose = gbsinterface.GetText(gbs, 20, 62, 2);
+			string gbsContractualMaturity = gbsinterface.GetText(gbs, 21, 66, 1);
+			string gbsFixedDraw = gbsinterface.GetText(gbs, 9, 26, 1);
+			string gbsDrawingPeriod = gbsinterface.GetText(gbs, 7, 26, 5);
+			string gbsCallNoticeAllowed = gbsinterface.GetText(gbs, 9, 68, 1);
+			string maxNumberOfDrawing = gbsinterface.GetText(gbs, 13, 46, 3);
+			string maxNumberOfDrawingInNonFacility = gbsinterface.GetText(gbs, 14, 46, 3);
+			string gbsHOTerm = gbsinterface.GetText(gbs, 15, 68, 4);
+			string gbsLocalTerm = gbsinterface.GetText(gbs, 16, 68, 4);
+
+			screenCount++;
+
+			merge(resultPath + filename + "_newCheck", screenCount - 1);
+			Microsoft.VisualBasic.Interaction.MsgBox("Update facility checked");
+			//			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= screenCount; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+			string strFilePath = resultPath + filename + "comparation.csv";
+			string strSeperator = ";";
+			StringBuilder sbOutput = new StringBuilder();
+
+
+			string[][] inaOutput = new string[][] {
+				new string[] {
+					"Header", "GBSValues", "ExcelValues", "Status of Check"
+				},
+				new string[] {
+					"Facility ID", gbsFacilityID.Trim(), facilityID, "=B2=C2"
+				},
+				new string[] {
+					"Customer ID", gbsCustomerID1.Trim(), customerID, "=B3=C3"
+				},
+						new string[] {
+					"Department", gbsDepartment.Trim(), department[0].Trim() + " " + department[1].Trim(), "=B4=C4"
+				},
+						new string[] {
+					"Officer", gbsOfficer.Trim(), officer.Trim(), "=B5=C5"
+				},
+						new string[] {
+					"Active", gbsActive.Trim(), DictExtension.GetValueOrDefault(myDict, "Active"), "=B6=C6"
+				},
+						new string[] {
+					"Facility CCY", gbsFacilityCCY.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility ccy"), "=B7=C7"
+				},
+						new string[] {
+					"Stat Date", gbsStartDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Start date"), "=B8=C8"
+				},
+						new string[] {
+					"ApprovalDate", gbsApprovalDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Approval date"), "=B9=C9"
+				},
+						new string[] {
+					"Memo", gbsMemo.Trim(), DictExtension.GetValueOrDefault(myDict, "Memo"), "=B10=10"
+				},
+						new string[] {
+					"Ownership Branch", gbsOwnershipBranch.Trim(), DictExtension.GetValueOrDefault(myDict, "Ownership Branch"), "=B11=C11"
+				},
+				new string[] {
+					"Customer Reference", gbsCustReference.Trim(), myDict["Customer reference"].Trim(), "=B12=C12"
+				},
+				//						new string[] {
+				//							"Last Repay Date", gbsLastRepayDate.Trim(), myDict["Active"].Trim(), "=B11=C11"
+				//						},
+				//						new string[] {
+				//							"Repayment Type", gbsRepaymentType.Trim(), myDict["Active"].Trim(), "=B12=C12"
+				//						},
+						new string[] {
+					"Next Facility", gbsNextFacility.Trim(), DictExtension.GetValueOrDefault(myDict, "Next facility"), "=B13=C13"
+				},
+						new string[] {
+					"Aggregation Faciity", gbsAggregationFacility.Trim(), DictExtension.GetValueOrDefault(myDict, "Aggregate facilty"), "=B14=C14"
+				},
+						new string[] {
+					"Status", gbsStatus.Trim(), DictExtension.GetValueOrDefault(myDict, "Status"), "=B15=C15"
+				},
+						new string[] {
+					"End Date", gbsEndDate.Trim(), DictExtension.GetValueOrDefault(myDict, "End Date"), "=B16=C16"
+				},
+						new string[] {
+					"Off Expiry", gbsOffExpiry.Trim(), DictExtension.GetValueOrDefault(myDict, "Off. expiry date"), "=B17=C17"
+				},
+						new string[] {
+							"Matured Amounts Affect", gbsMaturedAmountsAffect.Trim(), myDict["Matured amounts affect out limit"].Trim(), "=B18=C18"
+				},
+						new string[] {
+					"Reporting Branch", gbsReportingBranch.Trim(), DictExtension.GetValueOrDefault(myDict, "Reporting branch"), "=B19=C19"
+				},
+				//						new string[] {
+				//							"Review Date", gbsReviewDate.Trim(), myDict["Active"].Trim(), "=B21=C21"
+				//						},
+
+						new string[] {
+					"Check Online", gbsCheckOnline.Trim(), DictExtension.GetValueOrDefault(myDict, "Check online?"), "=B20=C20"
+				},
+						new string[] {
+					"Included Group ", gbsIncludedGroup.Trim(), DictExtension.GetValueOrDefault(myDict, "Include group"), "=B21=C21"
+				},
+						new string[] {
+					"Customer ID1", DictExtension.GetValueOrDefault(dictCustomer, "Customer ID1"), DictExtension.GetValueOrDefault(myDict, "Customer ID1"), "=B22=C22"
+				},
+						new string[] {
+					"Customer ID2", DictExtension.GetValueOrDefault(dictCustomer, "Customer ID2"), DictExtension.GetValueOrDefault(myDict, "Customer ID2"), "=B23=C23"
+				},
+						new string[] {
+					"Customer ID3", DictExtension.GetValueOrDefault(dictCustomer, "Customer ID3"), DictExtension.GetValueOrDefault(myDict, "Customer ID3"), "=B24=C24"
+				},
+						new string[] {
+					"Customer ID4", DictExtension.GetValueOrDefault(dictCustomer, "Customer ID4"), DictExtension.GetValueOrDefault(myDict, "Customer ID4"), "=B25=C25"
+				},
+						new string[] {
+					"Customer ID5", DictExtension.GetValueOrDefault(dictCustomer, "Customer ID5"), DictExtension.GetValueOrDefault(myDict, "Customer ID5"), "=B26=C26"
+				},
+						new string[] {
+					"CR Type", gbsCrType1.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type1"), "=B27=C27"
+				},
+						new string[] {
+					"CR Type", gbsCrType2.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type2"), "=B28=C28"
+				},
+						new string[] {
+					"CR Type", gbsCrType3.Trim(), DictExtension.GetValueOrDefault(myDict, "Cr. type3"), "=B29=C29"
+				},
+				new string[] {
+					"Initiating Office", gbsInitiatingOffice.Trim(), DictExtension.GetValueOrDefault(myDict, "Initiating officer"), "=B30=C30"
+				},
+				new string[] {
+					"Online Account Overdraft Proces", gbsOnlineAccount.Trim(), DictExtension.GetValueOrDefault(myDict, "Online Account Overdraft processing4page"), "=B31=C31"
+				},
+				new string[] {
+					"Derecognition Reason", gbsDerecognition.Trim(), DictExtension.GetValueOrDefault(myDict, "Derecognition Reason4page"), "=B32=C32"
+				},
+				new string[] {
+					"Measure", gbsMeasure.Trim(), DictExtension.GetValueOrDefault(myDict, "Measure4page"), "=B33=C33"
+				},
+				new string[] {
+					"Probation Start Date", gbsProbationStartDate.Trim(), DictExtension.GetValueOrDefault(myDict, "Probation Start Date4page"), "=B34=C34"
+				},
+				new string[] {
+					"Start date", gbsStartDateFor.Trim(), DictExtension.GetValueOrDefault(myDict, "Start date4page"), "=B35=C35"
+				},
+				new string[] {
+					"Status", gbsStatusFor.Trim(), DictExtension.GetValueOrDefault(myDict, "Status4page"), "=B36=C36"
+				},
+				new string[] {
+					"Facility ID", facilityID.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility ID6page"), "=B37=C37"
+				},
+				new string[] {
+					"New Facility ID", facilityID, DictExtension.GetValueOrDefault(myDict, "Next facility"), "=B38=C38"
+				},
+				new string[] {
+					"Contact ID 1", "", DictExtension.GetValueOrDefault(myDict, "Contact ID1A"), "=B39=C39"
+				},
+				new string[] {
+					"Contact ID 2", "" , DictExtension.GetValueOrDefault(myDict, "Contact ID2A"), "=B40=C40"
+				},
+				new string[] {
+					"Contact ID 3", "" , DictExtension.GetValueOrDefault(myDict, "Contact ID3A"), "=B41=C41"
+				},
+				new string[] {
+					"Contact ID 4", "", DictExtension.GetValueOrDefault(myDict, "Contact ID1B"), "=B42=C42"
+				},
+				new string[] {
+					"Contact ID 5", "", DictExtension.GetValueOrDefault(myDict, "Contact ID2B"), "=B43=C43"
+				},
+				new string[] {
+					"Contact ID 6", "", DictExtension.GetValueOrDefault(myDict, "Contact ID3B"), "=B44=C44"
+				},
+				new string[] {
+					"Currency List1", currencyList1.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list1I"), "=B45=C45"
+				},
+				new string[] {
+					"Currency List2", currencyList2.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list2I"), "=B46=C46"
+				},
+				new string[] {
+					"Currency List3", currencyList3.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list3I"), "=B47=C47"
+				},
+				new string[] {
+					"Currency List4", currencyList4.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list4I"), "=B48=C48"
+				},
+				new string[] {
+					"Currency List5", currencyList5.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list5I"), "=B49=C49"
+				},
+				new string[] {
+					"Currency List6", currencyList6.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list6I"), "=B50=C50"
+				},
+				new string[] {
+					"Currency List7", currencyList7.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list7I"), "=B51=C51"
+				},
+				new string[] {
+					"Currency List8", currencyList8.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list8I"), "=B52=C52"
+				},
+				new string[] {
+					"Currency List9", currencyList9.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list9I"), "=B53=C53"
+				},
+				new string[] {
+					"Currency List10", currencyList10.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list10I"), "=B54=C54"
+				},
+				new string[] {
+					"Currency List11", currencyList11.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list1E"), "=B55=C55"
+				},
+				new string[] {
+					"Currency List12", currencyList12.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list2E"), "=B56=C56"
+				},
+				new string[] {
+					"Currency List13", currencyList13.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list3E"), "=B57=C57"
+				},
+				new string[] {
+					"Currency List14", currencyList14.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list4E"), "=B58=C58"
+				},
+				new string[] {
+					"Currency List15", currencyList15.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list5E"), "=B59=C59"
+				},
+				new string[] {
+					"Currency List16", currencyList16.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list6E"), "=B60=C60"
+				},
+				new string[] {
+					"Currency List17", currencyList17.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list7E"), "=B61=C61"
+				},
+				new string[] {
+					"Currency List18", currencyList18.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list8E"), "=B62=C62"
+				},
+				new string[] {
+					"Currency List19", currencyList19.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list9E"), "=B63=C63"
+				},
+				new string[] {
+					"Currency List20", currencyList20.Trim(), DictExtension.GetValueOrDefault(myDict, "Currency list10E"), "=B64=C64"
+				},
+				new string[] {
+					"Subbranch List1", subBranch1.Trim(), DictExtension.GetValueOrDefault(myDict, "Available to subbranches of this branch:1"), "=B65=C65"
+				},
+				new string[] {
+					"Subbranch List2", subBranch2.Trim(), DictExtension.GetValueOrDefault(myDict, "Available to subbranches of this branch:2"), "=B66=C66"
+				},
+				new string[] {
+					"Subbranch List3", subBranch3.Trim(), DictExtension.GetValueOrDefault(myDict, "Available to subbranches of this branch:3"), "=B67=C67"
+				},
+				new string[] {
+					"Subbranch List4", subBranch4.Trim(), DictExtension.GetValueOrDefault(myDict, "Available to subbranches of this branch:4"), "=B68=C68"
+				},
+				new string[] {
+					"Drawing Period Start", gbsDrawingPeriodStart.Trim(), DictExtension.GetValueOrDefault(myDict, "Drawing period start"), "=B69=C69"
+				},
+				new string[] {
+					"Minimum Tenor", gbsMinTenor.Trim(), DictExtension.GetValueOrDefault(myDict, "Minimum tenor"), "=B70=C70"
+				},
+				new string[] {
+					"Maximum Draw Amount", gbsMaximumDrawAmount.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum draw amount"), "=B71=C71"
+				},
+				new string[] {
+					"Minimum Draw Amount", gbsMinimumDrawAmount.Trim(), DictExtension.GetValueOrDefault(myDict, "Minimum draw amount"), "=B72=C72"
+				},
+				new string[] {
+					"Drawing Period End", gbsDrawingPeriodEnd.Trim(), DictExtension.GetValueOrDefault(myDict, "Drawing period end"), "=B73=C73"
+				},
+				new string[] {
+					"Maximum Notice Period", gbsMaximumNoticePeriod.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum notice period"), "=B74=C74"
+				},
+				new string[] {
+					"Maximum Tenor", gbsMaxTenor.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum tenor"), "=B75=C75"
+				},
+				new string[] {
+					"Revolving", gbsRevolving.Trim(), DictExtension.GetValueOrDefault(myDict, "Revolving credit types (Restore availability):6page"), "=B76=C76"
+				},
+				new string[] {
+					"Committed", gbsCommitted.Trim(), DictExtension.GetValueOrDefault(myDict, "Committed?6page"), "=B77=C77"
+				},
+				new string[] {
+					"Facility type", gbsFacilityType.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility type6page"), "=B78=C78"
+				},
+				new string[] {
+					"Facility purpose", gbsFacilitypurpose.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility purpose6page"), "=B79=C79"
+				},
+				new string[] {
+					"Contractual Maturity", gbsContractualMaturity.Trim(), DictExtension.GetValueOrDefault(myDict, "Contractual maturity 6page"), "=B80=C80"
+				},
+				new string[] {
+					"Fixed Draw Allowed", gbsFixedDraw.Trim(), DictExtension.GetValueOrDefault(myDict, "Fixed draw allowed?"), "=B81=C81"
+				},
+				new string[] {
+					"Drawing period", gbsDrawingPeriod.Trim(), DictExtension.GetValueOrDefault(myDict, "Drawing period:"), "=B82=C82"
+				},
+				new string[] {
+					"Call Notice Allowed", gbsCallNoticeAllowed.Trim(), DictExtension.GetValueOrDefault(myDict, "Call notice allowed?"), "=B83=C83"
+				},
+				new string[] {
+					"Max NumberOfDrawing", maxNumberOfDrawing.Trim(), DictExtension.GetValueOrDefault(myDict, "Maximum number of drawings:6page"), "=B84=C84"
+				},
+				new string[] {
+					"Max NumberOfDrawing in non facility", maxNumberOfDrawingInNonFacility.Trim(), DictExtension.GetValueOrDefault(myDict, "Max number of drawings in non-facility ccy:6page"), "=B85=C85"
+				},
+				new string[] {
+					"H.O. term key:", gbsHOTerm.Trim(), DictExtension.GetValueOrDefault(myDict, "H.O. term key:6page"), "=B86=C86"
+				},
+				new string[] {
+					"Local term key:", gbsLocalTerm.Trim(), DictExtension.GetValueOrDefault(myDict, "Local term key:6page"), "=B87=C87"
+				},
+				new string[] {
+					"Facility ID", FacilityIDGBS.Trim(), DictExtension.GetValueOrDefault(myDict, "Facility ID6page"), "=B88=C88"
+				},
+				new string[] {
+					"Expiration date" , gbsExpiryDate.Trim(), DictExtension.GetValueOrDefault(myDict, "  Expiration date"), "=B89=C89"
+				},
+			};
+
+			int ilength = inaOutput.GetLength(0);
+			for (int i = 0; i < ilength; i++)
+				sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+			// Create and write the csv file
+			File.WriteAllText(strFilePath, sbOutput.ToString());
+
+			//			bool check = false;
+
+			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= screenCount + 1; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+		}
+
+		public static void PrintScreen(string fileName) {
+			Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
+			Graphics graphics = Graphics.FromImage(printscreen as System.Drawing.Image);
+			graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
+			printscreen.Save(@"C:\Users\Public\Projects\" + fileName + ".jpg", ImageFormat.Jpeg);
+		}
+
+		[DllImport("user32.dll")]
+				public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+		[DllImport("user32.dll")]
+				public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
+
+		public Bitmap PrintWindow(IntPtr hwnd) {
+			RECT rc;
+			GetWindowRect(hwnd, out rc);
+
+			Bitmap bmp = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppArgb);
+			Graphics gfxBmp = Graphics.FromImage(bmp);
+			IntPtr hdcBitmap = gfxBmp.GetHdc();
+			PrintWindow(hwnd, hdcBitmap, 0);
+			gfxBmp.ReleaseHdc(hdcBitmap);
+			gfxBmp.Dispose();
+
+			return bmp;
+		}
+
+		public void limitChangeLoanFacility(dynamic gbs, string resultPath, string filename) {
+
+			Excel excel = new Excel(false);
+			Dictionary<string, string> myDict = new Dictionary<string, string>();
+			int count = 0;
+			int start = 0;
+			string flag = "";
+
+			myDict.Add(excel.GetValueText(9, 4), excel.GetValueText(9, 7));
+
+			int accountCount = 0;
+			string[] accountID = new string[25];
+			for (int i = 10; i<20; i++) {
+				if (excel.GetValueText(i, 4) == "Account ID" && excel.GetValueText(i, 7) != "") {
+					accountID[accountCount] = excel.GetValueText(i, 7);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 12);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 14);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 16);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 18);
+					accountCount++;
+				}
+			}
+			//FCLLCAPT/FCLLCAPV
+			for (int i = 10; i<25; i++) {
+				flag = excel.GetValueText(i, 3);
+				if (flag == "FCLLCAPT/FCLLCAPV") {
+					start = i;
+					i = 25;
+				}
+			}
+			for (int i = start + 2; i< start + 13; i++) {
+				if (i == start + 7) {
+					myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7) + " " + excel.GetValueText(i, 9));
+				}
+				else {
+					if (excel.GetValueText(i, 4) != "" && excel.GetValueText(i, 7) != "") {
+						myDict.Add(excel.GetValueText(i, 4), excel.GetValueText(i, 7));
+					}
+					if (excel.GetValueText(i, 18) != "" && excel.GetValueText(i, 20) != "") {
+						myDict.Add(excel.GetValueText(i, 18), excel.GetValueText(i, 20));
+					}
+				}
+			}
+
+
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+			//			return myDict;
+			GbsInterface gbsinterface = new GbsInterface();
+			int screenCount = 1;
+			string gbsStartDate = "";
+			string gbsEndDate = "";
+			string gbsNewLimit = "";
+			GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+			GbsInterface.SetText(gbs, 4, 24, "N");
+			GbsInterface.SetText(gbs, 5, 24, "Y");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			bool check = true;
+			string numberFC = "";
+			count = 7;
+			while (check) {
+				string page = gbsinterface.GetText(gbs, 21, 74, 1);
+				if (count == 20 && page == "Y") {
+					count = 7;
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+
+				}
+				numberFC = gbsinterface.GetText(gbs, count, 71, 8);
+				if (numberFC == myDict["Facility ID"]) {
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, count, 1, "Y");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+
+					gbsStartDate = gbsinterface.GetText(gbs, 7, 68, 9);
+					gbsEndDate = gbsinterface.GetText(gbs, 8, 68, 9);
+					gbsNewLimit = gbsinterface.GetText(gbs, 13, 48, 15);
+					gbsNewLimit = gbsNewLimit.Replace(',', ' ');
+
+					merge(resultPath + filename + "_newCheck", screenCount - 1);
+					Microsoft.VisualBasic.Interaction.MsgBox("Change limit facility checked");
+					check = false;
+				}
+				else
+					count++;
+
+			}
+			string strFilePath = resultPath + filename + "comparation.csv";
+			string strSeperator = ";";
+			StringBuilder sbOutput = new StringBuilder();
+			string[][] inaOutput = new string[][] {
+				new string[] {
+					"Header", "GBSValues", "ExcelValues", "Status of Check"
+				},
+						new string[] {
+					"Facility ID", numberFC, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B2=C2"
+				},
+						new string[] {
+					"Start Date", gbsStartDate, DictExtension.GetValueOrDefault(myDict, "Start date"), "=B3=C3"
+				},
+						new string[] {
+					"End Date", gbsEndDate, DictExtension.GetValueOrDefault(myDict, "End date"), "=B4=C4"
+				},
+						new string[] {
+					"New Limit", gbsNewLimit, DictExtension.GetValueOrDefault(myDict, "New limit:"), "=B5=C5"
+				},
+			};
+			int ilength = inaOutput.GetLength(0);
+			for (int i = 0; i < ilength; i++)
+				sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+			// Create and write the csv file
+			File.WriteAllText(strFilePath, sbOutput.ToString());
+
+			System.IO.File.Delete(resultPath + "result.txt");
+			for (int i = 1; i <= screenCount; i++) {
+				System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+			}
+		}
+
+		public void limitChangeOverdraftFacility(dynamic gbs, string resultPath, string filename) {
+
+			Excel excel = new Excel(false);
+			Dictionary<string, string> myDict = new Dictionary<string, string>();
+			int count = 0;
+			int start = 0;
+			string flag = "";
+			myDict.Add(excel.GetValueText(8, 3), excel.GetValueText(8, 6));
+
+			int accountCount = 0;
+			int loopCount = 0;
+			string[] accountID = new string[25];
+			for (int i = 10; i<20; i++) {
+				if (excel.GetValueText(i, 3) == "Account ID" && excel.GetValueText(i, 6) != "") {
+					accountID[accountCount] = excel.GetValueText(i, 6);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 11);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 13);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 15);
+					accountCount++;
+					accountID[accountCount] = excel.GetValueText(i, 17);
+					accountCount++;
+					loopCount++;
+				}
+			}
+			//FCLACAPT/FCLACAPV
+			for (int i = 10; i<25; i++) {
+				flag = excel.GetValueText(i, 2);
+				if (flag == "FCLACAPT/FCLACAPV") {
+					start = i;
+					i = 25;
+				}
+			}
+
+			for (int i = start + 2; i< start + 11; i++) {
+				if (i == start + 7) {
+					myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 6) + " " + excel.GetValueText(i, 8));
+				}
+				else {
+					if (excel.GetValueText(i, 3) != "" && excel.GetValueText(i, 6) != "") {
+						myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 6));
+					}
+					if (excel.GetValueText(i, 17) != "" && excel.GetValueText(i, 19) != "") {
+						myDict.Add(excel.GetValueText(i, 17), excel.GetValueText(i, 19));
+					}
+				}
+			}
+
+			System.Console.WriteLine("FCLACAPT/FCLACAPV");
+
+			int dateCount = 1;
+			//ALMTUPDT/ALMTUPDV
+			for (int i = 23; i<35; i++) {
+				flag = excel.GetValueText(i, 2);
+				if (flag == "ALMTUPDT/ALMTUPDV") {
+					start = i;
+					i = 35;
+				}
+			}
+
+
+			for (int i = start + 2; i< start + 9; i++) {
+				if (i == start + 8) {
+					myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 11));
+				}
+				else {
+					if (excel.GetValueText(i, 3) != "" && excel.GetValueText(i, 6) != "") {
+						myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 6));
+					}
+					if (excel.GetValueText(i, 17) != "" && excel.GetValueText(i, 19) != "") {
+						myDict.Add(excel.GetValueText(i, 17) + dateCount, excel.GetValueText(i, 19));
+						dateCount++;
+					}
+				}
+			}
+
+			System.Console.WriteLine("ALMTUPDT/ALMTUPDV");
+
+			//ACCCUPDT/ACCCUPDV
+			for (int i = 35; i<45; i++) {
+				flag = excel.GetValueText(i, 2);
+				if (flag == "ACCCUPDT/ACCCUPDV") {
+					start = i;
+					i = 45;
+				}
+			}
+			for (int i = start + 2; i< start + 3; i++) {
+				if (i == start + 2) {
+					myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 6) + excel.GetValueText(i, 9));
+					myDict.Add(excel.GetValueText(i, 13), excel.GetValueText(i, 17));
+					myDict.Add(excel.GetValueText(i, 19), excel.GetValueText(i, 23));
+				}
+			}
+
+			System.Console.WriteLine("ACCCUPDT/ACCCUPDV");
+
+			//AMRTCAPT/AMRTCAPV
+			for (int i = 40; i<50; i++) {
+				flag = excel.GetValueText(i, 2);
+				if (flag == "AMRTCAPT/AMRTCAPV") {
+					start = i;
+					i = 50;
+				}
+			}
+			for (int i = start + 2; i< start + 5; i++) {
+				if (excel.GetValueText(i, 3) != "" && excel.GetValueText(i, 6) != "") {
+					myDict.Add(excel.GetValueText(i, 3), excel.GetValueText(i, 6));
+				}
+				if (excel.GetValueText(i, 17) != "" && excel.GetValueText(i, 19) != "") {
+					myDict.Add(excel.GetValueText(i, 17) + dateCount, excel.GetValueText(i, 19));
+					dateCount++;
+				}
+			}
+			int countSpread = 1;
+			for (int i = start + 6; i< start + 11; i++) {
+				if (excel.GetValueText(i, 3) != "" && excel.GetValueText(i, 4) != "") {
+					myDict.Add(excel.GetValueText(i, 3) + countSpread, excel.GetValueText(i, 4));
+					myDict.Add(excel.GetValueText(i, 6) + countSpread, excel.GetValueText(i, 8));
+					myDict.Add(excel.GetValueText(i, 17) + countSpread, excel.GetValueText(i, 19) + " " + excel.GetValueText(i, 21));
+					countSpread++;
+				}
+			}
+			for (int i = start + 12; i< start + 13; i++) {
+				if (i == start + 12) {
+					myDict.Add(excel.GetValueText(i, 5) , excel.GetValueText(i, 8));
+					myDict.Add(excel.GetValueText(i, 13), excel.GetValueText(i, 15));
+					myDict.Add(excel.GetValueText(i, 18) , excel.GetValueText(i, 19));
+				}
+			}
+
+			System.Console.WriteLine("AMRTCAPT/AMRTCAPV");
+			myDict.ToList().ForEach(x => Console.WriteLine(x.Key + " - " + x.Value));
+
+			GbsInterface gbsinterface = new GbsInterface();
+			int screenCount = 1;
+			string gbsStartDate = "";
+			string gbsEndDate = "";
+			string gbsNewLimit = "";
+			GbsInterface.SetText(gbs, 0, 2, "CPINQ");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("SF10");
+			gbs.WaitUnlock();
+			GbsInterface.SetText(gbs, 2, 17, myDict["Customer ID"]);
+			GbsInterface.SetText(gbs, 4, 24, "N");
+			GbsInterface.SetText(gbs, 5, 24, "Y");
+			gbs.WaitUnlock();
+			gbs.ExecOperation("F1");
+			gbs.WaitUnlock();
+			string gbsRateCode1 = "";
+			string gbsRateCode2 = "";
+			string gbsRateCode3 = "";
+			string gbsSpread1 = "";
+			string gbsSpread2 = "";
+			string gbsSpread3 = "";
+			string gbsEffectiveDate = "";
+			string gbsBusinessType = "";
+			string gbsDepartm = "";
+			string gbsNegativeBalance = "";
+
+			bool check = true;
+			string numberFC = "";
+			count = 7;
+			while (check) {
+				string page = gbsinterface.GetText(gbs, 21, 74, 1);
+				if (count == 20 && page == "Y") {
+					count = 7;
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+
+				}
+				numberFC = gbsinterface.GetText(gbs, count, 71, 8);
+				if (numberFC == myDict["Facility ID"] || numberFC == myDict["Facility ID for account overdraft limits:"]) {
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, count, 1, "Y");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+
+					gbsStartDate = gbsinterface.GetText(gbs, 7, 68, 9);
+					gbsEndDate = gbsinterface.GetText(gbs, 8, 68, 9);
+					gbsNewLimit = gbsinterface.GetText(gbs, 13, 48, 15);
+//					gbsNewLimit = gbsNewLimit.Replace(',', ' ');
+					accountCount = 0;
+					if (loopCount>0 && myDict["Balance type"].Length > 1) {
+						for (int i = 0; i<loopCount; i++) {
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 0, 2, "AMRTINQ");
+							gbs.WaitUnlock();
+							gbs.ExecOperation("SF10");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 3, 5, "D");
+							gbs.WaitUnlock();
+							GbsInterface.SetText(gbs, 3, 12, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 38, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 47, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 55, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 3, 65, accountID[accountCount]);
+							gbs.WaitUnlock();
+							accountCount++;
+							GbsInterface.SetText(gbs, 4, 20, DictExtension.GetValueOrDefault(myDict, "Balance type"));
+							gbs.WaitUnlock();
+							gbs.ExecOperation("F1");
+							gbs.WaitUnlock();
+							ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+							screenCount++;
+//					int add = loopCount + 1;
+							System.Console.WriteLine(loopCount);
+							if (i == 0) {
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code 1"].ToUpper()){
+										gbsRateCode1 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread1 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbsEffectiveDate = gbsinterface.GetText(gbs, j, 8, 11);
+										j = 20;
+									}
+								}
+							}
+							else if (i==1){
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code 2"].ToUpper()){
+										gbsRateCode2 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread2 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbsEffectiveDate = gbsinterface.GetText(gbs, j, 8, 11);
+										j = 20;
+									}
+								}
+							}
+							else if (i==2){
+								for (int j = 7; j<20;  j++){
+									if(gbsinterface.GetText(gbs, j, 40, 6) == myDict["Rate code 3"].ToUpper()){
+										gbsRateCode3 = gbsinterface.GetText(gbs, j, 40, 6);
+										gbsSpread3 = gbsinterface.GetText(gbs, j, 50, 15);
+										gbsEffectiveDate = gbsinterface.GetText(gbs, j, 8, 11);
+										j = 20;
+									}
+								}
+							}
+						}
+					}
+					accountCount = 0;
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 0, 2, "ACCTINQ");
+					gbs.WaitUnlock();
+					gbs.ExecOperation("SF10");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 1, 14, "D");
+					gbs.WaitUnlock();
+					GbsInterface.SetText(gbs, 1, 21, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 47, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 56, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 64, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					GbsInterface.SetText(gbs, 1, 74, accountID[accountCount]);
+					gbs.WaitUnlock();
+					accountCount++;
+					gbs.ExecOperation("F1");
+					gbs.WaitUnlock();
+					ScreenShot(gbsinterface, resultPath, filename + "_newCheck" + screenCount);
+					screenCount++;
+					gbsBusinessType = gbsinterface.GetText(gbs, 12, 69, 9);
+					gbsDepartm = gbsinterface.GetText(gbs, 16, 41, 4);
+					gbsNegativeBalance = gbsinterface.GetText(gbs, 9, 29, 1);
+
+					merge(resultPath + filename + "_newCheck", screenCount - 1);
+					Microsoft.VisualBasic.Interaction.MsgBox("Change limit facility checked");
+								check = false;
+							}
+							else
+								count++;
+
+						}
+						string strFilePath = resultPath + filename + "comparation.csv";
+						string strSeperator = ";";
+						StringBuilder sbOutput = new StringBuilder();
+						string[][] inaOutput = new string[][] {
+							new string[] {
+								"Header", "GBSValues", "ExcelValues", "Status of Check"
+							},
+						new string[] {
+								"Facility ID", numberFC, DictExtension.GetValueOrDefault(myDict, "Facility ID"), "=B2=C2"
+							},
+						new string[] {
+								"Start Date", gbsStartDate, DictExtension.GetValueOrDefault(myDict, "Start date"), "=B3=C3"
+							},
+						new string[] {
+								"End Date", gbsEndDate, DictExtension.GetValueOrDefault(myDict, "End date"), "=B4=C4"
+							},
+						new string[] {
+								"New Limit", gbsNewLimit, DictExtension.GetValueOrDefault(myDict, "New limit:"), "=B5=C5"
+							},
+						new string[] {
+								"Rate code1", gbsRateCode1, DictExtension.GetValueOrDefault(myDict, "Rate code 1"), "=B6=C6"
+							},
+						new string[] {
+								"Rate code2", gbsRateCode2, DictExtension.GetValueOrDefault(myDict, "Rate code 2"), "=B7=C7"
+							},
+						new string[] {
+								"Rate code3", gbsRateCode3, DictExtension.GetValueOrDefault(myDict, "Rate code 3"), "=B8=C8"
+							},
+						new string[] {
+								"Spread1", gbsSpread1, DictExtension.GetValueOrDefault(myDict, "  Spread1"), "=B9=C9"
+							},
+						new string[] {
+								"Spread2", gbsSpread2, DictExtension.GetValueOrDefault(myDict, "  Spread2"), "=B10=C10"
+							},
+						new string[] {
+								"Spread3", gbsSpread3, DictExtension.GetValueOrDefault(myDict, "  Spread3"), "=B11=C11"
+							},
+						new string[] {
+								"Effective date", gbsEffectiveDate, DictExtension.GetValueOrDefault(myDict, "Effective date"), "=B12=C12"
+							},
+						new string[] {
+								"Business type", gbsBusinessType, DictExtension.GetValueOrDefault(myDict, "Business type"), "=B13=C13"
+							},
+						new string[] {
+								"Department", gbsDepartm, DictExtension.GetValueOrDefault(myDict, "Department:"), "=B14=C14"
+							},
+						new string[] {
+								"Negative balance", gbsNegativeBalance, DictExtension.GetValueOrDefault(myDict, "Negative balance allowed"), "=B15=C15"
+							},
+						};
+						int ilength = inaOutput.GetLength(0);
+						for (int i = 0; i < ilength; i++)
+							sbOutput.AppendLine(string.Join(strSeperator, inaOutput[i]));
+
+						// Create and write the csv file
+						File.WriteAllText(strFilePath, sbOutput.ToString());
+
+						System.IO.File.Delete(resultPath + "result.txt");
+						for (int i = 1; i <= screenCount; i++) {
+							System.IO.File.Delete(resultPath + filename + "_newCheck" + i + ".jpg");
+						}
+					}
+				}
+
+	class Program {
+//		static string test;
+
+		static void Main(string[] args) {
+
+			GbsInterface gbsinterface = new GbsInterface();
+//			dynamic theComObject = Interaction.GetObject(@"C:\Temp\GBS\GBS-Prod-I59-EU1-HU.653");
+			dynamic theComObject = Interaction.GetObject(@"C:\Users\FZ54MH\OneDrive - ING\Desktop\GBS-Prod-I59-EU1-HU.653");
+			var currentSesion = theComObject.Application.ActiveTerminal;
+			var gbs = theComObject.Application.ActiveProfile;
+			System.Console.WriteLine("Connecting to GBS");
+
+			string sourcePath = Microsoft.VisualBasic.Interaction.InputBox("Enter file path \nExample: " + @"C:/Users/file.pdf", "Source Path");
+			string resultPath = Microsoft.VisualBasic.Interaction.InputBox("Enter result dictionary path \nExample: " + @"C:/Users/", "Result Path");
+//			gbsinterface.GetPdf(sourcePath, resultPath);
+
+			string filename = System.IO.Path.GetFileName(sourcePath.ToLower());
+
+			if (filename.Contains("close")) {
+				gbsinterface.closeFacility(gbs, resultPath, filename);
+			}
+			else if (filename.Contains("update")) {
+				gbsinterface.updateFacility(gbs, resultPath, filename);
+			}
+			else if (filename.Contains("new")) {
+				gbsinterface.newFacility(gbs, resultPath, filename);
+			}
+			else if (filename.Contains("change")) {
+//				string question = Microsoft.VisualBasic.Interaction.InputBox("If Overdraft choose: 1 \nif loan choose 2 \n", "Question");
+				if (filename.Contains("loan"))
+					gbsinterface.limitChangeLoanFacility(gbs, resultPath, filename);
+				else if (filename.Contains("overdraft"))
+					gbsinterface.limitChangeOverdraftFacility(gbs, resultPath, filename);
+				else
+					Microsoft.VisualBasic.Interaction.MsgBox("Wrong file name");
+			}
+			Console.ReadKey();
+		}
+	}
+
+	static class DictExtension {
+		public static TValue GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default(TValue)) {
+			if (dictionary == null) {
+				throw new ArgumentNullException(nameof (dictionary));
+			} // using C# 6
+			if (key == null) {
+				throw new ArgumentNullException(nameof (key));
+			} //  using C# 6
+
+			TValue value;
+			return dictionary.TryGetValue(key, out value) ? value : defaultValue;
+		}
+	}
+}
+#pragma warning restore 1701
